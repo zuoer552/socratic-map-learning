@@ -70,6 +70,10 @@ class RuntimeTests(unittest.TestCase):
         progress_path = Path(initialized["progress_path"])
         self.assertTrue(progress_path.is_file())
         self.assertEqual(initialized["unit_packet"]["status"], "missing")
+        self.assertEqual(
+            initialized["learning_cycle"]["current_phase"],
+            "understanding",
+        )
 
         self.run_cli(
             "commit",
@@ -107,6 +111,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(first["receipt"]["revision"], 1)
         self.assertEqual(first["receipt"]["current_node_id"], "node-criterion")
         self.assertEqual(
+            first["learning_cycle"]["current_phase"],
+            "understanding",
+        )
+        self.assertEqual(
             first["semantic_relations"]["incoming"][0]["from"],
             "node-question",
         )
@@ -131,10 +139,16 @@ class RuntimeTests(unittest.TestCase):
                 "partial",
                 "--evidence-kind",
                 "none",
+                "--learning-phase",
+                "verification",
             ).stdout
         )
         self.assertEqual(partial["receipt"]["revision"], 2)
         self.assertEqual(partial["receipt"]["current_node_id"], "node-criterion")
+        self.assertEqual(
+            partial["learning_cycle"]["current_phase"],
+            "verification",
+        )
 
         self.run_cli(
             "commit",
@@ -221,6 +235,9 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn("function renderSourceNavigation(", map_text)
         self.assertIn("function renderQuestionPage(", map_text)
         self.assertIn("function renderReasoning(", map_text)
+        self.assertIn("function phaseChip(", map_text)
+        self.assertIn("function sourceReading(", map_text)
+        self.assertIn("最近验证", map_text)
         self.assertNotIn("查看本单元导读", map_text)
         self.assertNotIn("unit-overview-link", map_text)
         self.assertNotIn("局部关系图", map_text)
@@ -299,7 +316,15 @@ class RuntimeTests(unittest.TestCase):
                         {
                             "id": "criterion",
                             "text": "可靠知识需要一个能够排除任意性的判断标准。",
+                            "full_text": "只要知识主张仍可任意改变，可靠知识就需要一个能够排除任意性的判断标准。",
+                            "translation": "可靠知识必须排除任意改变。",
                             "connection": "提出课程的首个必要问题。",
+                            "interaction_kind": "distinguish",
+                            "expected_answer": "判断标准排除任意性。",
+                            "required_premises": [
+                                "任意改变的主张不能成为可靠知识。"
+                            ],
+                            "scope_boundary": "不能据此推出唯一判断标准。",
                         }
                     ],
                 },
@@ -326,6 +351,11 @@ class RuntimeTests(unittest.TestCase):
             prepared["unit_packet"]["excerpts"][0]["id"],
             "criterion",
         )
+        self.assertEqual(prepared["unit_packet"]["version"], 2)
+        self.assertEqual(
+            prepared["unit_packet"]["excerpts"][0]["required_premises"],
+            ["任意改变的主张不能成为可靠知识。"],
+        )
         self.assertEqual(prepared["prepared_unit"]["excerpt_count"], 1)
 
         committed = json.loads(
@@ -340,10 +370,16 @@ class RuntimeTests(unittest.TestCase):
                 "partial",
                 "--evidence-kind",
                 "none",
+                "--learning-phase",
+                "verification",
             ).stdout
         )
         self.assertEqual(committed["unit_packet"]["status"], "ready")
         self.assertNotIn("excerpts", committed["unit_packet"])
+        self.assertEqual(
+            committed["learning_cycle"]["current_phase"],
+            "verification",
+        )
 
         fresh = self.context(course)
         self.assertEqual(fresh["unit_packet"]["status"], "ready")
@@ -351,6 +387,11 @@ class RuntimeTests(unittest.TestCase):
             fresh["unit_packet"]["excerpts"][0]["text"],
             "可靠知识需要一个能够排除任意性的判断标准。",
         )
+        map_text = (course / "map.html").read_text(encoding="utf-8")
+        self.assertIn("只要知识主张仍可任意改变", map_text)
+        self.assertIn("可靠知识必须排除任意改变", map_text)
+        self.assertNotIn("判断标准排除任意性", map_text)
+        self.assertIn('"current_phase":"verification"', map_text)
 
     def test_history_mode_changes_current_view_language(self) -> None:
         course = self.root / "history-mode"
@@ -463,6 +504,147 @@ class RuntimeTests(unittest.TestCase):
             self.run_cli("validate", str(course)).stdout
         )
         self.assertTrue(validation["ok"])
+
+    def test_current_map_reveals_new_ground_without_unlocking_future_map(
+        self,
+    ) -> None:
+        course = self.root / "current-map-ground"
+        self.initialize(course)
+        self.run_cli(
+            "commit",
+            str(course),
+            "--expected-revision",
+            "0",
+            "--expected-current",
+            "node-question",
+            "--diagnosis",
+            "mastered",
+            "--evidence-kind",
+            "own_words_reason",
+        )
+        self.run_cli(
+            "commit",
+            str(course),
+            "--expected-revision",
+            "1",
+            "--expected-current",
+            "node-criterion",
+            "--diagnosis",
+            "mastered",
+            "--evidence-kind",
+            "correct_distinction",
+        )
+        fragment_path = course / "fragment.json"
+        fragment_path.write_text(
+            json.dumps(
+                {
+                    "sections": [],
+                    "source_anchors": [],
+                    "semantic_edges": [
+                        {
+                            "id": "edge-new-ground-conclusion",
+                            "from": "node-new-ground",
+                            "to": "node-conclusion",
+                            "relation": "grounds",
+                            "label": "提供当前根据",
+                            "rationale": "新编译的材料为当前结论提供根据。",
+                            "source_refs": ["source-argument"],
+                            "origin": "reviewed",
+                        }
+                    ],
+                    "nodes": [
+                        {
+                            "id": "node-new-ground",
+                            "node_type": "claim",
+                            "parent": "node-conclusion",
+                            "section": "argument",
+                            "position": 4,
+                            "relation": "grounds",
+                            "title": "当前论证中新编译的根据",
+                            "summary": "当前材料应当可见",
+                            "detail": "它还不是路线目标，也没有被判定为掌握。",
+                            "bridge": "它支持当前结论。",
+                            "next": "继续重建当前关系。",
+                            "mastery_criterion": "学习者能说明它如何支持结论。",
+                            "prerequisites": [],
+                            "source_refs": ["source-argument"],
+                            "common_confusions": [],
+                            "allowed_next": ["node-conclusion"],
+                            "is_final": False,
+                            "frontier_open": False,
+                            "preview": False,
+                        }
+                    ],
+                    "set_final": {},
+                    "add_allowed_next": {},
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            "extend",
+            str(course),
+            "--fragment",
+            str(fragment_path),
+        )
+
+        blueprint = json.loads(
+            (course / ".socratic-map" / "blueprint.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        atlas = blueprint["argument_atlas"]
+        current_map = next(
+            item
+            for item in atlas["maps"]
+            if item["id"] == "map-main-argument"
+        )
+        current_map["node_ids"].append("node-new-ground")
+        atlas["inferences"].append(
+            {
+                "id": "inference-new-ground",
+                "map_id": "map-main-argument",
+                "premise_ids": ["node-new-ground"],
+                "conclusion_id": "node-conclusion",
+                "bridge": "新根据支持当前结论。",
+                "kind": "supports",
+                "source_refs": ["source-argument"],
+                "mastery_edge_ids": [],
+                "origin": "reviewed",
+            }
+        )
+        overlay_path = course / "overlay.json"
+        overlay_path.write_text(
+            json.dumps(
+                {"argument_atlas": atlas},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            "structure",
+            str(course),
+            "--overlay",
+            str(overlay_path),
+        )
+
+        map_text = (course / "map.html").read_text(encoding="utf-8")
+        marker = '<script type="application/json" id="graph-data">'
+        graph_json = map_text.split(marker, 1)[1].split("</script>", 1)[0]
+        graph = json.loads(graph_json)
+        node_lookup = {item["id"]: item for item in graph["nodes"]}
+        self.assertEqual(node_lookup["node-new-ground"]["status"], "future")
+        self.assertFalse(node_lookup["node-new-ground"]["answer_hidden"])
+        future_stage = next(
+            item
+            for item in graph["argument_atlas"]["system_spine"]["stages"]
+            if item["id"] == "stage-future-transfer"
+        )
+        self.assertEqual(future_stage["status"], "future")
+        self.assertEqual(future_stage["answer_id"], "")
 
     def test_structure_overlay_separates_knowledge_graph_from_lesson_route(self) -> None:
         course = self.root / "structured"

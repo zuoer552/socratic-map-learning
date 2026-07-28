@@ -47,6 +47,23 @@ RELATION_MASTERY_LEVELS = {
     "transferable",
     "retained",
 }
+LEARNING_PHASES = {
+    "understanding",
+    "verification",
+    "critical",
+    "transfer",
+    "synthesis",
+}
+INTERACTION_KINDS = {
+    "judge",
+    "distinguish",
+    "fill",
+    "reason",
+    "connect",
+    "reconstruct",
+    "interpret",
+    "transfer",
+}
 RELATION_TYPES = {
     "root",
     "supports",
@@ -1606,6 +1623,26 @@ def ensure_graph_schema(connection: sqlite3.Connection, path: Path) -> None:
         if get_meta_optional(connection, "unit_packet") is None:
             set_meta(connection, "unit_packet", {})
             metadata_changed = True
+        if get_meta_optional(connection, "unit_packets") is None:
+            legacy_packet = get_meta_optional(connection, "unit_packet", {})
+            packets = {}
+            if isinstance(legacy_packet, dict) and legacy_packet.get(
+                "current_node_id"
+            ):
+                packets[str(legacy_packet["current_node_id"])] = legacy_packet
+            set_meta(connection, "unit_packets", packets)
+            metadata_changed = True
+        if get_meta_optional(connection, "learning_phases") is None:
+            current_id = str(get_meta_optional(connection, "current_node_id", ""))
+            set_meta(
+                connection,
+                "learning_phases",
+                {current_id: "understanding"} if current_id else {},
+            )
+            metadata_changed = True
+        if get_meta_optional(connection, "latest_inference_step_id") is None:
+            set_meta(connection, "latest_inference_step_id", "")
+            metadata_changed = True
         if metadata_changed:
             connection.commit()
         return
@@ -1746,6 +1783,23 @@ def ensure_graph_schema(connection: sqlite3.Connection, path: Path) -> None:
             )
         if get_meta_optional(connection, "unit_packet") is None:
             set_meta(connection, "unit_packet", {})
+        if get_meta_optional(connection, "unit_packets") is None:
+            legacy_packet = get_meta_optional(connection, "unit_packet", {})
+            packets = {}
+            if isinstance(legacy_packet, dict) and legacy_packet.get(
+                "current_node_id"
+            ):
+                packets[str(legacy_packet["current_node_id"])] = legacy_packet
+            set_meta(connection, "unit_packets", packets)
+        if get_meta_optional(connection, "learning_phases") is None:
+            current_id = str(get_meta_optional(connection, "current_node_id", ""))
+            set_meta(
+                connection,
+                "learning_phases",
+                {current_id: "understanding"} if current_id else {},
+            )
+        if get_meta_optional(connection, "latest_inference_step_id") is None:
+            set_meta(connection, "latest_inference_step_id", "")
         set_meta(connection, "schema_version", SCHEMA_VERSION)
         set_meta(connection, "graph_schema_version", GRAPH_SCHEMA_VERSION)
         connection.commit()
@@ -1978,6 +2032,9 @@ def initialize_course(
             "argument_atlas": blueprint["argument_atlas"],
             "inference_mastery": {},
             "unit_packet": {},
+            "unit_packets": {},
+            "learning_phases": {current: "understanding"},
+            "latest_inference_step_id": "",
         }
         for key, value in meta_values.items():
             set_meta(connection, key, value)
@@ -2788,6 +2845,15 @@ def relation_family(relation: str) -> str:
 def graph_snapshot(connection: sqlite3.Connection) -> dict[str, Any]:
     """Return the v5 argument atlas plus its learner-mastery overlay."""
 
+    argument_atlas = get_meta(connection, "argument_atlas")
+    active_node_id = str(get_meta(connection, "current_node_id"))
+    revealed_node_ids = {
+        str(node_id)
+        for argument_map in argument_atlas.get("maps", [])
+        if argument_map.get("status") != "future"
+        and str(argument_map.get("conclusion_id", "")) == active_node_id
+        for node_id in argument_map.get("node_ids", [])
+    }
     anchors = {
         row["id"]: row
         for row in connection.execute(
@@ -2836,7 +2902,10 @@ def graph_snapshot(connection: sqlite3.Connection) -> dict[str, Any]:
     nodes: list[dict[str, Any]] = []
     node_lookup: dict[str, dict[str, Any]] = {}
     for row in node_rows:
-        hidden = row["status"] == "future"
+        hidden = (
+            row["status"] == "future"
+            and row["id"] not in revealed_node_ids
+        )
         payload = {
             "id": row["id"],
             "section": row["section_id"],
@@ -2985,7 +3054,6 @@ def graph_snapshot(connection: sqlite3.Connection) -> dict[str, Any]:
             group["label"] += f"；另 {len(labels) - 2} 条"
         overview_edges.append(group)
 
-    argument_atlas = get_meta(connection, "argument_atlas")
     inference_mastery = get_meta_optional(
         connection,
         "inference_mastery",
@@ -3229,6 +3297,32 @@ def graph_snapshot(connection: sqlite3.Connection) -> dict[str, Any]:
     node_counts = {"mastered": 0, "current": 0, "future": 0}
     for node in nodes:
         node_counts[node["status"]] += 1
+    learning_phases = get_meta_optional(connection, "learning_phases", {})
+    if not isinstance(learning_phases, dict):
+        learning_phases = {}
+    unit_packets = get_meta_optional(connection, "unit_packets", {})
+    if not isinstance(unit_packets, dict):
+        unit_packets = {}
+    map_unit_packets: dict[str, Any] = {}
+    for node_id, packet in unit_packets.items():
+        if not isinstance(packet, dict):
+            continue
+        excerpts = []
+        for excerpt in packet.get("excerpts", []):
+            if not isinstance(excerpt, dict):
+                continue
+            public_excerpt = {
+                key: excerpt[key]
+                for key in ("id", "text", "full_text", "translation")
+                if excerpt.get(key)
+            }
+            if public_excerpt.get("text"):
+                excerpts.append(public_excerpt)
+        if excerpts:
+            map_unit_packets[str(node_id)] = {
+                "unit_title": str(packet.get("unit_title", "")),
+                "excerpts": excerpts,
+            }
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -3248,6 +3342,22 @@ def graph_snapshot(connection: sqlite3.Connection) -> dict[str, Any]:
             "section_id": current_node["section"] if current_node else "",
             "map_id": current_map_id,
         },
+        "learning_cycle": {
+            "current_phase": (
+                str(learning_phases.get(current_id, "understanding"))
+                if current_id
+                else "synthesis"
+            ),
+            "phase_by_node": learning_phases,
+            "latest_inference_step_id": str(
+                get_meta_optional(
+                    connection,
+                    "latest_inference_step_id",
+                    "",
+                )
+            ),
+        },
+        "unit_packets": map_unit_packets,
         "progress": {
             "nodes": node_counts,
             "relations": relation_counts,
@@ -3783,13 +3893,17 @@ def normalize_unit_packet(
     if not isinstance(excerpts, list) or not 1 <= len(excerpts) <= 12:
         raise SkillError("Unit packet excerpts must contain 1 to 12 entries")
 
-    normalized_excerpts: list[dict[str, str]] = []
+    normalized_excerpts: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     optional_fields = (
+        "full_text",
         "translation",
         "connection",
         "term",
         "question_seed",
+        "interaction_kind",
+        "expected_answer",
+        "scope_boundary",
         "locator",
     )
     for index, item in enumerate(excerpts, start=1):
@@ -3809,10 +3923,31 @@ def normalize_unit_packet(
             value = str(item.get(field, "")).strip()
             if value:
                 normalized_item[field] = value
+        interaction_kind = normalized_item.get("interaction_kind", "")
+        if interaction_kind and interaction_kind not in INTERACTION_KINDS:
+            raise SkillError(
+                f"Unit packet excerpt {excerpt_id!r} has invalid "
+                f"interaction_kind {interaction_kind!r}"
+            )
+        required_premises = item.get("required_premises", [])
+        if required_premises is None:
+            required_premises = []
+        if not isinstance(required_premises, list) or not all(
+            isinstance(value, str) and value.strip()
+            for value in required_premises
+        ):
+            raise SkillError(
+                f"Unit packet excerpt {excerpt_id!r} required_premises "
+                "must be a list of non-empty strings"
+            )
+        if required_premises:
+            normalized_item["required_premises"] = [
+                value.strip() for value in required_premises
+            ]
         normalized_excerpts.append(normalized_item)
 
     return {
-        "version": 1,
+        "version": 2,
         "status": "ready",
         "current_node_id": current_node_id,
         "unit_title": str(raw.get("unit_title", "")).strip(),
@@ -3830,7 +3965,14 @@ def active_unit_packet_payload(
 ) -> dict[str, Any]:
     if not current_node_id:
         return {"status": "complete", "current_node_id": ""}
-    packet = get_meta_optional(connection, "unit_packet", {})
+    packets = get_meta_optional(connection, "unit_packets", {})
+    packet = (
+        packets.get(current_node_id, {})
+        if isinstance(packets, dict)
+        else {}
+    )
+    if not packet:
+        packet = get_meta_optional(connection, "unit_packet", {})
     source = get_meta(connection, "course_source")
     source_sha256 = str(source.get("sha256", ""))
     ready = bool(
@@ -3875,6 +4017,14 @@ def context_payload(
     for row in counts_rows:
         counts[row["status"]] = int(row["count"])
     counts["total"] = sum(counts.values())
+    learning_phases = get_meta_optional(connection, "learning_phases", {})
+    if not isinstance(learning_phases, dict):
+        learning_phases = {}
+    current_phase = (
+        str(learning_phases.get(current_id, "understanding"))
+        if current_id
+        else "synthesis"
+    )
 
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -3897,6 +4047,17 @@ def context_payload(
             current_node_id=current_id,
             include_full=include_unit_packet,
         ),
+        "learning_cycle": {
+            "current_phase": current_phase,
+            "phase_by_node": learning_phases,
+            "latest_inference_step_id": str(
+                get_meta_optional(
+                    connection,
+                    "latest_inference_step_id",
+                    "",
+                )
+            ),
+        },
         "current": None,
         "parent": None,
         "prerequisites": [],
@@ -4067,6 +4228,16 @@ def prepare_unit(
             source_sha256=str(course_source.get("sha256", "")),
         )
         set_meta(connection, "unit_packet", normalized)
+        packets = get_meta_optional(connection, "unit_packets", {})
+        if not isinstance(packets, dict):
+            packets = {}
+        packets[current_id] = normalized
+        set_meta(connection, "unit_packets", packets)
+        phases = get_meta_optional(connection, "learning_phases", {})
+        if not isinstance(phases, dict):
+            phases = {}
+        phases.setdefault(current_id, "understanding")
+        set_meta(connection, "learning_phases", phases)
         connection.commit()
         result = context_payload(connection)
         result["prepared_unit"] = {
@@ -4116,6 +4287,7 @@ def commit_turn(
     diagnosis: str,
     evidence_kind: str,
     next_node: str | None,
+    learning_phase: str | None = None,
     relation_edge_id: str | None = None,
     relation_level: str | None = None,
     inference_step_id: str | None = None,
@@ -4131,6 +4303,8 @@ def commit_turn(
         raise SkillError("Non-mastered decisions must use evidence kind 'none'")
     if diagnosis != "mastered" and next_node:
         raise SkillError("Only a mastered decision may advance to another node")
+    if learning_phase and learning_phase not in LEARNING_PHASES:
+        raise SkillError(f"Invalid learning phase: {learning_phase}")
     if bool(relation_edge_id) != bool(relation_level):
         raise SkillError(
             "--relation-edge and --relation-level must be supplied together"
@@ -4306,6 +4480,23 @@ def commit_turn(
                 )
                 set_meta(connection, "current_node_id", selected_target)
 
+        learning_phases = get_meta_optional(
+            connection,
+            "learning_phases",
+            {},
+        )
+        if not isinstance(learning_phases, dict):
+            learning_phases = {}
+        if diagnosis == "mastered":
+            learning_phases[current_id] = "synthesis"
+            if selected_target:
+                learning_phases.setdefault(selected_target, "understanding")
+        elif learning_phase:
+            learning_phases[current_id] = learning_phase
+        else:
+            learning_phases.setdefault(current_id, "understanding")
+        set_meta(connection, "learning_phases", learning_phases)
+
         new_revision = revision + 1
         set_meta(connection, "revision", new_revision)
         connection.execute(
@@ -4390,6 +4581,11 @@ def commit_turn(
                 "inference_mastery",
                 inference_mastery,
             )
+            set_meta(
+                connection,
+                "latest_inference_step_id",
+                inference_step_id,
+            )
         connection.execute(
             """
             INSERT INTO events(revision, event_type, payload_json, created_at)
@@ -4404,6 +4600,10 @@ def commit_turn(
                         "diagnosis": diagnosis,
                         "evidence_kind": evidence_kind,
                         "next_node_id": selected_target,
+                        "learning_phase": learning_phases.get(
+                            selected_target or current_id,
+                            "synthesis" if diagnosis == "mastered" else "understanding",
+                        ),
                         "relation_edge_id": relation_edge_id or "",
                         "relation_level": relation_level or "",
                         "inference_step_id": inference_step_id or "",
@@ -4442,6 +4642,10 @@ def commit_turn(
             "evidence_kind": evidence_kind,
             "previous_node_id": current_id,
             "next_node_id": selected_target,
+            "learning_phase": learning_phases.get(
+                selected_target or current_id,
+                "synthesis" if diagnosis == "mastered" else "understanding",
+            ),
             "relation_edge_id": relation_edge_id or "",
             "relation_level": relation_level or "",
             "inference_step_id": inference_step_id or "",
@@ -4492,6 +4696,37 @@ def validate_database(
         errors.append(
             f"meta current_node_id {current_id!r} does not match {current_nodes}"
         )
+    learning_phases = get_meta_optional(connection, "learning_phases", {})
+    if not isinstance(learning_phases, dict):
+        errors.append("learning_phases must be an object")
+        learning_phases = {}
+    else:
+        for node_id, phase in learning_phases.items():
+            if node_id not in nodes:
+                errors.append(
+                    f"learning_phases references missing node {node_id}"
+                )
+            if phase not in LEARNING_PHASES:
+                errors.append(
+                    f"{node_id}: invalid learning phase {phase!r}"
+                )
+    if current_id and current_id not in learning_phases:
+        errors.append("Current node must have a learning phase")
+
+    unit_packets = get_meta_optional(connection, "unit_packets", {})
+    if not isinstance(unit_packets, dict):
+        errors.append("unit_packets must be an object")
+    else:
+        for node_id, packet in unit_packets.items():
+            if node_id not in nodes:
+                errors.append(f"unit_packets references missing node {node_id}")
+            if not isinstance(packet, dict):
+                errors.append(f"{node_id}: unit packet must be an object")
+                continue
+            if packet.get("current_node_id") != node_id:
+                errors.append(
+                    f"{node_id}: archived unit packet node id does not match"
+                )
 
     cycles = dependency_cycles(
         {
@@ -4624,6 +4859,17 @@ def validate_database(
                 errors.append(
                     f"{inference_id}: invalid inference mastery {level!r}"
                 )
+    latest_inference_step_id = str(
+        get_meta_optional(connection, "latest_inference_step_id", "")
+    )
+    if (
+        latest_inference_step_id
+        and latest_inference_step_id not in inference_ids
+    ):
+        errors.append(
+            "latest_inference_step_id references missing step "
+            f"{latest_inference_step_id}"
+        )
 
     if deep:
         source = get_meta(connection, "course_source")
@@ -5931,6 +6177,11 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         choices=sorted(EVIDENCE_KINDS),
     )
+    commit_parser.add_argument(
+        "--learning-phase",
+        choices=sorted(LEARNING_PHASES),
+        help="Active local learning-cycle phase after this turn.",
+    )
     commit_parser.add_argument("--next")
     commit_parser.add_argument(
         "--relation-edge",
@@ -5958,6 +6209,7 @@ def build_parser() -> argparse.ArgumentParser:
             diagnosis=args.diagnosis,
             evidence_kind=args.evidence_kind,
             next_node=args.next,
+            learning_phase=args.learning_phase,
             relation_edge_id=args.relation_edge,
             relation_level=args.relation_level,
             inference_step_id=args.inference_step,

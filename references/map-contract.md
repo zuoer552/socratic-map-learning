@@ -44,10 +44,12 @@ A question page contains:
 
 - source-structure breadcrumbs;
 - question, status, primary source unit, and related source units;
+- the current local learning-cycle phase when this is the active question;
 - only this question's local relation map, immediately after the question
   header;
-- progressively disclosed source, explanation, inferential role, and mastery
-  details;
+- one compact conclusion plus progressively disclosed atomic relations, full
+  source context, faithful translation, explanation, critical boundary,
+  transfer record, and mastery details;
 - the question overview and broader source location after the local map;
 - previous-question pressure and next necessary problem, below the local
   map.
@@ -139,6 +141,22 @@ Clicking a reviewable statement reveals its source excerpt, plain explanation,
 relation role, and mastery criterion. Clicking “deeper grounds” opens the
 next lower layer in place. Expansion never sends the learner to a new proof
 page.
+
+The target's compact summary never substitutes for the atomic relation chain.
+Every inference surface displays its own mastery level with text as well as
+color. The most recently demonstrated inference receives a distinct current
+marker; do not color the entire question as mastered when only one relation was
+demonstrated.
+
+The active question displays one of:
+`understanding`, `verification`, `critical`, `transfer`, or `synthesis`, using
+learner-facing mode-neutral labels. The phase is orientation, not proof and not
+a progress percentage.
+
+Prepared source material remains progressively available after the course moves
+on. When chat used a source fragment, the expanded source area preserves the
+complete sentence or necessary local context, the faithful translation when
+needed, and a clear boundary between source wording and teacher explanation.
 
 Primary reasoning content is never hidden behind a redundant opening action.
 Entering a question page presents its local map directly after a compact
@@ -235,6 +253,10 @@ Reject if any is false:
 12. Future answers remain hidden.
 13. No canvas, SVG graph, pan, or zoom interaction remains.
 14. Reading position and strict mastery remain separate.
-15. Desktop, 375px mobile, light, dark, and reduced-motion views are operable.
-16. Runtime, proof, contrast, deep validation, unit, interaction, and browser
+15. The active local learning-cycle phase is visible without being mistaken for
+    source content or mastery.
+16. Compact conclusions, atomic chains, per-relation mastery, and prepared full
+    source context remain distinguishable and progressively available.
+17. Desktop, 375px mobile, light, dark, and reduced-motion views are operable.
+18. Runtime, proof, contrast, deep validation, unit, interaction, and browser
     console checks pass.

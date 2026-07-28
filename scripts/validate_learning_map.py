@@ -1476,6 +1476,20 @@ def validate_v7(
     if not isinstance(atlas, dict):
         errors.append("v7 graph-data needs argument_atlas")
         atlas = {}
+    current_payload = snapshot.get("current", {})
+    current_node_id = (
+        str(current_payload.get("node_id", ""))
+        if isinstance(current_payload, dict)
+        else ""
+    )
+    revealed_node_ids = {
+        str(node_id)
+        for argument_map in atlas.get("maps", [])
+        if isinstance(argument_map, dict)
+        and argument_map.get("status") != "future"
+        and str(argument_map.get("conclusion_id", "")) == current_node_id
+        for node_id in argument_map.get("node_ids", [])
+    }
     node_by_id = {
         str(node.get("id", "")): node
         for node in nodes
@@ -1502,7 +1516,11 @@ def validate_v7(
             counts[status] += 1
         if not node.get("title") or not node.get("source"):
             errors.append(f"{node_id}: proposition needs title and source")
-        if status == "future" and node.get("answer_hidden") is not True:
+        if (
+            status == "future"
+            and node.get("answer_hidden") is not True
+            and node_id not in revealed_node_ids
+        ):
             errors.append(f"{node_id}: future answer is not hidden")
 
     maps = atlas.get("maps")

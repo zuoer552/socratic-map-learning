@@ -30,21 +30,22 @@ class SkillResponseContractTests(unittest.TestCase):
         self.assertIn("no PDF extraction", skill)
         self.assertIn("Reuse across several", skill)
         self.assertIn("turns is allowed", skill)
-        self.assertIn("ask exactly one next question", skill)
+        self.assertIn("end with exactly one useful learner move", skill)
         self.assertIn("place the stable clickable HTML map link alone on the final", skill)
-        self.assertLess(len(skill.encode("utf-8")), 11000)
+        self.assertLess(len(skill.encode("utf-8")), 15000)
 
     def test_contract_contains_confirmed_routine_constraints(self) -> None:
         contract = CONTRACT.read_text(encoding="utf-8")
         required = [
-            "one exact source excerpt of one to three sentences",
-            "exactly one question",
+            "shortest sufficient exact source span",
+            "exactly one meaningful learner move",
             "on the final line",
             "at most one essential new term",
             "at most one main example",
             "make at most one smaller scaffold attempt",
-            "what the passage means in plain language",
-            "what it receives from the preceding discussion",
+            "two to five atomic steps",
+            "previous result → current problem → current result → next pressure",
+            "source wording → faithful translation → teacher explanation",
             "The teacher supplies the complete account",
             "Do not display page, chapter, edition",
         ]
@@ -60,11 +61,15 @@ class SkillResponseContractTests(unittest.TestCase):
             "new authorial content",
             "derivable relation",
             "mastery evidence",
-            "Question eligibility gate",
-            "merely repeating the question",
+            "Learner-move eligibility gate",
+            "silently draft its expected answer",
+            "Every required premise",
+            "merely repeating the prompt",
+            "this distinction",
+            "how does this help you explain",
             "Normative, psychological, and ontological levels",
             "concrete case → plain-language relation → author term → boundary",
-            "At a transition between faculties",
+            "At a transition",
         ]
         for phrase in required:
             with self.subTest(phrase=phrase):
@@ -73,11 +78,13 @@ class SkillResponseContractTests(unittest.TestCase):
     def test_unit_question_seeds_are_candidates_not_commands(self) -> None:
         preparation = UNIT_PREPARATION.read_text(encoding="utf-8")
         required = [
-            "candidate, not executable instruction",
-            "unintroduced premise",
+            "candidate learner move",
+            "every premise was supplied",
             "scope boundary",
             "never authoritative",
             "latest reasoning",
+            "expected answer",
+            "required premises",
         ]
         for phrase in required:
             with self.subTest(phrase=phrase):
@@ -102,24 +109,49 @@ class SkillResponseContractTests(unittest.TestCase):
                     f"Missing policy phrase: {phrase}",
                 )
 
-    def test_transfer_uses_a_strict_source_whitelist(self) -> None:
+    def test_transfer_uses_domain_neutral_quality_gates(self) -> None:
         skill = SKILL.read_text(encoding="utf-8")
         contract = CONTRACT.read_text(encoding="utf-8")
         combined = f"{skill}\n{contract}"
-        allowed = [
-            "verified news or public events",
-            "established historical knowledge or events",
-            "ordinary, low-stakes interpersonal situations",
+        required = [
+            "No domain is automatically allowed or forbidden",
+            "structural",
+            "factual reliability",
+            "risk",
+            "privacy",
+            "skip transfer",
         ]
-        for phrase in allowed:
+        for phrase in required:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, combined)
-        self.assertIn(
+        self.assertNotIn(
             "Never generate or select AI, work, workplace, business, product, or operations",
-            contract,
+            combined,
         )
-        self.assertIn("Verify time-sensitive or disputed news", contract)
-        self.assertNotIn("public, work, news, AI, or interpersonal", combined)
+        self.assertIn("Verify time-sensitive or disputed facts", contract)
+
+    def test_five_phase_cycle_is_unified_and_evidence_driven(self) -> None:
+        skill = SKILL.read_text(encoding="utf-8")
+        contract = CONTRACT.read_text(encoding="utf-8")
+        course_model = (
+            SKILL_DIR / "references" / "course-model.md"
+        ).read_text(encoding="utf-8")
+        map_contract = (
+            SKILL_DIR / "references" / "map-contract.md"
+        ).read_text(encoding="utf-8")
+        combined = "\n".join((skill, contract, course_model, map_contract))
+        for phase in [
+            "understanding",
+            "verification",
+            "critical",
+            "transfer",
+            "synthesis",
+        ]:
+            with self.subTest(phase=phase):
+                self.assertIn(phase, combined)
+        self.assertIn("Transitions depend on evidence, not turn count", skill)
+        self.assertIn("current local learning-cycle phase", map_contract)
+        self.assertIn("Immediate prompted completion establishes at most", contract)
 
     def test_contract_is_mode_sensitive(self) -> None:
         skill = SKILL.read_text(encoding="utf-8")
@@ -148,9 +180,9 @@ class SkillResponseContractTests(unittest.TestCase):
         self.assertIn('"history": ("条关键历史关系", "历史关系掌握")', runtime)
 
     def test_documentation_and_version_are_updated(self) -> None:
-        self.assertEqual(VERSION.read_text(encoding="utf-8").strip(), "7.3.0")
+        self.assertEqual(VERSION.read_text(encoding="utf-8").strip(), "7.4.0")
         readme = README.read_text(encoding="utf-8")
-        self.assertIn("# Socratic Map Learning 7.3.0", readme)
+        self.assertIn("# Socratic Map Learning 7.4.0", readme)
         self.assertIn("response-contract.md", readme)
         self.assertIn("unit-preparation.md", readme)
         self.assertIn("progress-template-v2.html", readme)
@@ -161,6 +193,9 @@ class SkillResponseContractTests(unittest.TestCase):
         self.assertIn("1–12", preparation)
         self.assertIn("prepare-unit", preparation)
         self.assertIn("one-call fast path", preparation)
+        self.assertIn('"full_text"', preparation)
+        self.assertIn('"expected_answer"', preparation)
+        self.assertIn('"required_premises"', preparation)
 
 
 if __name__ == "__main__":

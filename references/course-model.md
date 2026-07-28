@@ -27,6 +27,7 @@ The HTML is never authoritative.
 | Reviewable node | complete statement and evidence | What is being established, explained, interpreted, or used? |
 | Local relation | grounds, target, bridge, kind | How do these source-grounded elements connect? |
 | Route | current target, allowed next | What should be learned next? |
+| Learning cycle | phase, evidence, weakest relation | What kind of learner move is useful now? |
 | View | source route, question page, disclosure | How is the system displayed? |
 
 No field from one layer substitutes for another.
@@ -268,6 +269,18 @@ The four inference kinds encode structural roles, not genre:
 8. A visible child conclusion equals its parent entry proposition.
 9. Every visible root-to-child path contains at most 12 unique nodes.
 10. Multiple grounds that jointly establish a target share one relation step.
+11. One inference bridge performs one reviewable relation move. If a bridge
+    hides several inferential, causal, practical, or interpretive jumps, split
+    it into atomic steps.
+12. The target node's summary is the compact conclusion; its incoming
+    inferences are the expandable reconstruction. The summary may not replace
+    the relation chain.
+13. When the active lesson-route node is a reviewed current map's conclusion,
+    propositions newly compiled into that map are visible even when their
+    legacy route status remains `future`. That status means the proposition
+    has not become a route target; it does not hide the active conclusion's
+    reviewed grounds. Before the learner reaches the conclusion, and in every
+    future map, answers remain hidden.
 
 Stored maps may reuse established node ids. The renderer shows only the selected
 question's local map and can name an earlier answer inside its relation bridge
@@ -322,6 +335,23 @@ A node is not robustly mastered because its sentence was repeated. The learner
 must reconstruct its incoming source-grounded relation and the outgoing
 `must_ask` transition.
 
+Local learning-cycle phases:
+
+- understanding;
+- verification;
+- critical;
+- transfer;
+- synthesis.
+
+The phase is learner-state metadata, not source topology. It never proves a
+relation or changes the canonical question chain. A new unit begins at
+`understanding`; a completed unit closes at `synthesis`. Transfer may be skipped
+when no source-faithful, relevant case exists.
+
+Keep unit packets by current node rather than discarding them at the next unit.
+The active chat may use the shortest sufficient excerpt, while the map can
+progressively disclose the stored full source context and faithful translation.
+
 ## Transaction model
 
 Every context receipt contains revision and the current node id (stored in the
@@ -332,10 +362,12 @@ A routine commit:
 1. checks the receipt;
 2. stores node evidence;
 3. optionally raises one relation mastery level;
-4. advances the lesson route when appropriate;
-5. runs cheap invariants;
-6. regenerates state output;
-7. atomically commits SQLite and HTML.
+4. optionally updates the learning-cycle phase;
+5. advances the lesson route when appropriate;
+6. records the most recently demonstrated relation;
+7. runs cheap invariants;
+8. regenerates state output;
+9. atomically commits SQLite and HTML.
 
 Routine commits do not mutate the system spine or local-map topology.
 

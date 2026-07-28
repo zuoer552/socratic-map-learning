@@ -902,6 +902,17 @@
       border-radius: var(--radius-md);
     }
 
+    .inference-card.latest {
+      outline: 3px solid var(--amber-soft);
+      border-color: var(--amber);
+    }
+
+    .inference-card.mastery-reconstructable,
+    .inference-card.mastery-transferable,
+    .inference-card.mastery-retained {
+      border-width: 2px;
+    }
+
     .inference-card.objects {
       color: var(--junction-objection-fg);
       background: var(--junction-objection-bg);
@@ -923,6 +934,52 @@
     }
 
     .inference-card p { margin: 0; }
+
+    .inference-mastery {
+      display: inline-flex;
+      margin-top: 9px;
+      padding: 3px 8px;
+      color: inherit;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .source-reading {
+      margin-top: 30px;
+      padding: 0 18px;
+      color: var(--default-fg);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+    }
+
+    .source-reading > summary {
+      min-height: 52px;
+      padding: 14px 0;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .source-reading-body {
+      display: grid;
+      gap: 18px;
+      padding: 0 0 18px;
+    }
+
+    .source-reading-item {
+      padding-top: 16px;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .source-reading-item blockquote {
+      margin: 8px 0 0;
+      padding-left: 14px;
+      border-left: 3px solid var(--accent);
+    }
+
+    .source-reading-item p { margin: 8px 0 0; }
 
     .premise-row {
       display: grid;
@@ -1147,6 +1204,8 @@
     const maps = atlas.maps;
     const inferences = atlas.inferences;
     const nodes = snapshot.nodes;
+    const learningCycle = snapshot.learning_cycle || {};
+    const unitPackets = snapshot.unit_packets || {};
     const transitions = spine.transitions;
     const units = [...sourceStructure.units].sort(
       (first, second) => first.position - second.position
@@ -1173,6 +1232,20 @@
       mastered: "已完成",
       current: "学习中",
       future: "尚未开始"
+    };
+    const phaseLabels = {
+      understanding: "理解作者",
+      verification: "验证连接",
+      critical: "批判审查",
+      transfer: "发散迁移",
+      synthesis: "收束重建"
+    };
+    const masteryLabels = {
+      unassessed: "尚未验证",
+      understood: "当下理解",
+      reconstructable: "能够重建",
+      transferable: "能够迁移",
+      retained: "稳定掌握"
     };
 
     const kindLabels = {
@@ -1361,6 +1434,18 @@
       return `<span class="status-chip ${escapeHtml(status)}">
         <span class="status-dot ${escapeHtml(status)}" aria-hidden="true"></span>
         ${escapeHtml(statusLabels[status] || status)}
+      </span>`;
+    }
+
+    function phaseChip(stage) {
+      if (stage.status !== "current") return "";
+      const phaseByNode = learningCycle.phase_by_node || {};
+      const phase = phaseByNode[stage.answer_id] ||
+        phaseByNode[snapshot.current.node_id] ||
+        learningCycle.current_phase ||
+        "understanding";
+      return `<span class="meta-chip phase-chip">
+        学习阶段 · ${escapeHtml(phaseLabels[phase] || phase)}
       </span>`;
     }
 
@@ -1614,8 +1699,11 @@
     }
 
     function inferenceMarkup(inference) {
+      const mastery = inference.mastery_level || "unassessed";
+      const latest = inference.id === learningCycle.latest_inference_step_id;
       return `
-        <div class="inference-card ${escapeHtml(inference.kind)}">
+        <div class="inference-card ${escapeHtml(inference.kind)}
+          mastery-${escapeHtml(mastery)} ${latest ? "latest" : ""}">
           <strong>${escapeHtml(
             inference.kind === "objects"
               ? modeCopy.objects
@@ -1626,7 +1714,39 @@
                   : modeCopy.supports
           )}</strong>
           <p>${escapeHtml(inference.bridge)}</p>
+          <span class="inference-mastery">
+            ${latest ? "最近验证 · " : ""}${escapeHtml(
+              masteryLabels[mastery] || mastery
+            )}
+          </span>
         </div>
+      `;
+    }
+
+    function sourceReading(stage) {
+      const packet = unitPackets[stage.answer_id] ||
+        (stage.status === "current"
+          ? unitPackets[snapshot.current.node_id]
+          : null);
+      const excerpts = packet?.excerpts || [];
+      if (!excerpts.length || stage.status === "future") return "";
+      return `
+        <details class="source-reading">
+          <summary>原文与完整上下文</summary>
+          <div class="source-reading-body">
+            ${excerpts.map((excerpt) => `
+              <section class="source-reading-item">
+                <strong>原文</strong>
+                <blockquote>${escapeHtml(
+                  excerpt.full_text || excerpt.text
+                )}</blockquote>
+                ${excerpt.translation ? `
+                  <p><strong>直译：</strong>${escapeHtml(excerpt.translation)}</p>
+                ` : ""}
+              </section>
+            `).join("")}
+          </div>
+        </details>
       `;
     }
 
@@ -1756,6 +1876,7 @@
             <h1>${escapeHtml(stage.question)}</h1>
             <div class="hero-meta">
               ${statusChip(stage.status)}
+              ${phaseChip(stage)}
               ${relatedUnitChips(stage)}
             </div>
           </header>
@@ -1763,6 +1884,8 @@
           <section class="proof-section" aria-label="局部关系">
             ${renderProofFor(stage)}
           </section>
+
+          ${sourceReading(stage)}
 
           <section class="question-context" aria-labelledby="question-context-title">
             <h2 id="question-context-title">原书位置</h2>

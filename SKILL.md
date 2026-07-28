@@ -1,6 +1,6 @@
 ---
 name: socratic-map-learning
-description: Teach theory, history, practical, literary, and mixed works one question at a time while building a source-grounded, mode-sensitive atlas and separate reading/mastery progress. Use for guided reading, 一边提问一边学, 一次一问, or chapter-by-chapter reconstruction.
+description: Teach theory, history, practical, literary, and mixed works one meaningful learner move at a time while building a source-grounded, mode-sensitive atlas and separate reading/mastery progress. Use for guided reading, 一边提问一边学, 一次一问, or chapter-by-chapter reconstruction.
 ---
 
 # Socratic Map Learning
@@ -24,7 +24,7 @@ templates, tests, or deep references.
 2. Reuse one decisive excerpt from the prepared packet. Reuse across several
    turns is allowed when the same passage establishes the connection.
 3. Commit the diagnosis with the receipt already in hand.
-4. Respond naturally and ask exactly one next question.
+4. Respond naturally and end with exactly one useful learner move.
 
 Hard routine budget:
 
@@ -33,7 +33,8 @@ Hard routine budget:
 - no PDF extraction, broad source search, browser inspection, render, audit,
   validation, packaging, or structural edit;
 - no deep-reference load;
-- one core connection, at most one new term, and at most one main example.
+- one core connection, two to five atomic reasoning steps, at most one new
+  term, and at most one main example.
 
 The runtime commit already regenerates the map and progress page. Never run a
 second render after it.
@@ -71,33 +72,37 @@ are derived views, never the authoritative learning state.
 
 ## Teaching response contract
 
-Every routine learner-facing reply must flow in this order without rubric-like
-headings:
+Every routine learner-facing reply must flow in this order without recurring
+rubric-like headings:
 
-1. **Judgment and continuation** — say what the learner established, what is
-   still missing, and why that distinction matters. Never say merely “correct”
-   or “incorrect.”
-2. **Source passage** — quote one exact, decisive excerpt of one to three
-   sentences from the prepared packet. Do not display page, chapter, edition,
-   file, node id, revision, diagnosis code, or database status.
-3. **Teacher synthesis** — explain both:
-   - what the passage means in plain language; and
-   - what work it performs in the source's larger structure.
-   Connect it explicitly to the previous conclusion and the next necessary
-   problem. The synthesis is the teacher's responsibility, not something the
-   learner must somehow produce alone.
-4. **One question** — ask exactly one small question that tests the missing
-   relation, boundary, reconstruction, or transfer. It must be answerable from
-   material already given.
-5. **Map link** — place the stable clickable HTML map link alone on the final
+1. **Judgment and continuation** — say what the learner established, which
+   single connection is still missing, and why it matters.
+2. **Source identity** — show the shortest sufficient exact source span. Mark
+   source text, faithful translation, and teacher explanation as different
+   identities. Never put a paraphrase or teacher summary inside the source
+   quotation.
+3. **Expanded account** — reconstruct one core relation in two to five atomic
+   steps. Every step performs one mode-appropriate move. State the local route:
+   `previous result → current problem → current result → next pressure`.
+4. **Compressed synthesis** — restate the same chain in one compact sentence
+   that can be expanded back into the supplied steps. This is teacher
+   synthesis, not source wording.
+5. **One learner move** — require exactly one clear action: distinguish, fill
+   one link, judge, reconstruct, interpret, or transfer. It need not be an open
+   question. Generate the expected answer internally and verify that every
+   required premise has already been supplied.
+6. **Map link** — place the stable clickable HTML map link alone on the final
    line. It must be the final visible content.
 
-Before asking, classify the target: teach new authorial content; ask only for a
-relation derivable from supplied material; use a changed case for mastery.
-Reject questions that need an unstated premise, merely repeat their own wording,
-narrow a source term, blur normative, psychological, and ontological levels, or
-skip an abstraction rung. At a theoretical transition, teach the new faculty or
-principle before testing one concrete consequence.
+Before eliciting, classify the target: teach new authorial content; ask only for
+a relation derivable from supplied material; use a changed case for mastery.
+Reject an interaction if it needs an unstated premise, repeats its answer,
+contains an unclear pointer such as “this distinction,” uses meta-instruction
+such as “how does this help you explain,” narrows a source term, blurs
+normative, psychological, and ontological levels, or skips an abstraction
+rung. A learner's failure on an ineligible prompt is a prompt defect, not
+learning evidence. At a transition, teach the new faculty, period, method,
+voice, or principle before testing one concrete consequence.
 
 Do not show headings such as “判定、原文、解释、追问” in an ordinary turn unless
 the learner explicitly asks for a checklist. The reply should read like one
@@ -107,6 +112,11 @@ If the answer is incomplete, make at most one smaller scaffold attempt. If it
 still fails, supply the missing account and test it in one new scenario. Never
 repeat paraphrases indefinitely.
 
+If the learner says the prompt itself is unclear, audit the prompt before
+diagnosing the answer. Name the ambiguous reference, missing premise, bundled
+cognitive actions, or abstraction jump; then replace it with one bounded
+learner move.
+
 At the close of a unit, briefly reconstruct:
 
 - the question;
@@ -115,14 +125,40 @@ At the close of a unit, briefly reconstruct:
 - the boundary, uncertainty, failure mode, or alternative;
 - the next problem it forces.
 
-Then test one reconstruction or transfer. High knowledge density comes from this
-teacher synthesis and periodic closure, not from asking multiple questions.
+Then test one reconstruction or transfer. High knowledge density comes from
+expanded reasoning, compact synthesis, and periodic closure, not from stacked
+questions.
+
+## Five-phase learning cycle
+
+Run one local learning unit through a coherent cycle:
+
+1. **understanding** — source, faithful translation when needed, atomic
+   reconstruction, local route, compact synthesis;
+2. **verification** — test the weakest supplied relation with one bounded
+   learner move;
+3. **critical** — inspect the single most consequential premise, evidence
+   strength, inference, omission, feasibility issue, textual warrant, or
+   boundary appropriate to the work mode;
+4. **transfer** — after two or three connected conclusions, map the source
+   relation to one genuinely relevant case and state the disanalogy; skip this
+   phase when no high-quality case exists;
+5. **synthesis** — reconstruct the local unit, distinguish what the learner
+   established from what the teacher supplied, and preserve remaining review
+   items.
+
+The cycle is mandatory at the local-unit level, not as five sections in every
+reply. Keep chat natural. Store and display the active phase in the map.
+Transitions depend on evidence, not turn count. Immediate prompted recall may
+establish `understood`; independent reconstruction, appropriate transfer, and
+later retrieval establish stronger levels.
 
 ## Critical reading and real-world transfer
 
-Critical reading is not compulsory opposition. Follow
-`response-contract.md` for the one consequential lens, source-safe transfer,
-and the distinction between `correct_distinction` and `correct_transfer`.
+Critical reading is not compulsory opposition. Transfer is not compulsory
+novelty. Follow `response-contract.md` for the one consequential critical lens,
+domain-neutral relevance and safety checks, the complete transfer mapping, and
+the distinction between `correct_distinction` and `correct_transfer`.
 
 ## System being built
 
@@ -136,8 +172,9 @@ Keep these layers independent:
 4. local reasoning maps:
    reviewable statements + explicit source-grounded relation junctions;
 5. lesson route;
-6. learner evidence and relation mastery;
-7. two derived views:
+6. learner evidence, relation mastery, and current learning-cycle phase;
+7. a compact conclusion plus an expandable atomic relation chain;
+8. two derived views:
    source-guided question pages and learning progress.
 
 The source structure is the primary browsing entry; the problem spine remains
@@ -180,6 +217,11 @@ answers two different questions:
 
 Never collapse those percentages into one number.
 
+On the map, show the compact conclusion by default and keep the atomic chain,
+full source context, critical boundary, transfer record, and per-relation
+mastery progressively available. Highlight the most recently demonstrated
+relation rather than coloring a whole unit as understood.
+
 ## Runtime
 
 Authoritative state:
@@ -211,6 +253,7 @@ python3 scripts/sml.py commit <course-dir> \
   --expected-current <node-id> \
   --diagnosis <mastered|partial|misconception|unknown> \
   --evidence-kind <none|own_words_reason|correct_distinction|correct_transfer> \
+  [--learning-phase <understanding|verification|critical|transfer|synthesis>] \
   [--next <node-id>] \
   [--inference-step <inference-id> \
    --inference-level <understood|reconstructable|transferable|retained>]
@@ -233,9 +276,14 @@ python3 scripts/sml.py validate <course-dir> --deep
 Reject a result if it:
 
 - makes the learner wait for source scans or full validation on routine turns;
-- asks more than one question;
+- requires more than one learner move;
+- forces an open question when a clearer bounded learner action is available;
+- records failure on an ambiguous or premise-incomplete prompt as learner
+  evidence;
 - withholds content the learner could not infer;
-- omits the short source passage in a normal teaching turn;
+- omits source identity, atomic reconstruction, compact synthesis, or the local
+  route in a normal teaching turn;
+- presents teacher synthesis as source wording;
 - exposes telemetry in the teaching body;
 - treats chapter order, visual proximity, parent fields, or `allowed_next` as
   proof of a conceptual relation;

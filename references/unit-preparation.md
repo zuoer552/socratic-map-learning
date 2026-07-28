@@ -17,14 +17,18 @@ several short Socratic turns without stuffing the entire book into context.
 3. Inspect only the smallest source range needed to teach that unit. Prefer an
    existing extracted text layer; render PDF pages only when the text layer is
    unusable or layout itself matters.
-4. Select 2–6 short decisive excerpts. A packet may contain 1–12.
+4. Select 2–6 shortest-sufficient decisive excerpts. A packet may contain
+   1–12. Preserve the complete sentence or local context separately when the
+   teaching excerpt is a fragment.
 5. For each excerpt, record how it connects to the current claim, cause,
    method, interpretation, or boundary. The connection note must distinguish
    what the teacher must supply from what the learner can infer, and name any
    scope boundary that affects the next question.
-6. Treat every question seed as a candidate, not executable instruction. Check
-   that it needs no unintroduced premise, does not repeat its own wording, keeps
-   source terms at their proper scope, and advances one abstraction rung.
+6. Draft one candidate learner move with an expected answer and an explicit
+   list of required premises. Treat it as a candidate, not executable
+   instruction. Check that every premise was supplied, the move has a clear
+   referent and one cognitive action, it does not repeat its own answer, source
+   scope is preserved, and it advances one abstraction rung.
 7. Save the temporary JSON packet and call `prepare-unit`.
 8. Keep the returned full packet and receipt in conversation context. Routine
    turns reuse them without new source reads.
@@ -39,11 +43,19 @@ several short Socratic turns without stuffing the entire book into context.
   "excerpts": [
     {
       "id": "excerpt-1",
-      "text": "一至三句准确原文。",
-      "translation": "只在确有需要时提供。",
+      "text": "对话中使用的最短充分准确原文。",
+      "full_text": "完整句子或必要的上下文。",
+      "translation": "忠实直译；不是教师解释。",
       "connection": "这段话支持什么；老师必须先讲什么；学习者已有何前提；边界在哪里。",
       "term": "本单元至多一个必要术语。",
-      "question_seed": "通过提问资格检查、可由已有材料推出的一个小问题。",
+      "question_seed": "候选学习动作，不一定是开放问题。",
+      "interaction_kind": "distinguish",
+      "expected_answer": "一个明确、可共同判断的预期答案。",
+      "required_premises": [
+        "此前已经提供的前提一",
+        "此前已经提供的前提二"
+      ],
+      "scope_boundary": "这一连接不能推出什么。",
       "locator": "仅供内部核验，不在日常回复显示。"
     }
   ]
@@ -57,15 +69,20 @@ source fingerprint. A supplied fingerprint must match.
 
 - Accuracy outranks variety. Reusing one decisive passage is better than
   searching for a new decorative quote every turn.
+- `text` is the shortest sufficient teaching span; `full_text` preserves the
+  complete source context when different. Mark every omission honestly.
 - Excerpts must directly establish, distinguish, contextualize, support, limit,
   object, or reply within the current reading mode.
 - Do not fill the packet with broad background that will not affect a question.
 - Keep source text separate from translation, reconstruction, and teaching
   explanation.
-- A `question_seed` is never authoritative. Re-evaluate it against the learner's
-  latest reasoning and the response contract before use.
-- Reject a seed whose expected answer is an unintroduced authorial premise,
-  a paraphrase of the prompt, or a claim outside the excerpt's scope boundary.
+- A `question_seed` is never authoritative. Re-evaluate it against the
+  learner's latest reasoning and the response contract before use. Prefer a
+  bounded distinction, completion, reconstruction, or judgment when an open
+  question would be vague.
+- Reject a seed when `expected_answer` is unclear, any `required_premises` item
+  has not been supplied, the answer merely paraphrases the prompt, or the claim
+  exceeds `scope_boundary`.
 - If the packet is insufficient, do one narrow refresh and replace the packet;
   do not scan the whole book.
 
