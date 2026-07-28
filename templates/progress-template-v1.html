@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta
+    name="description"
+    content="区分阅读位置与关系掌握的学习进度页面。"
+  >
+  <title>{{PAGE_TITLE}}</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: #f5f3ed;
+      --surface: #ffffff;
+      --surface-soft: #eeece5;
+      --ink: #172034;
+      --muted: #536078;
+      --quiet: #6b7689;
+      --line: #c5cbd4;
+      --line-strong: #526176;
+      --accent: #0f766e;
+      --accent-strong: #0b5b55;
+      --accent-soft: #e4f3ef;
+      --mastery: #315e9e;
+      --mastery-soft: #e8f1ff;
+      --current: #a54b00;
+      --current-soft: #fff4d6;
+      --focus: #a54b00;
+      --shadow: 0 18px 52px rgba(19, 31, 52, 0.1);
+      --radius-sm: 12px;
+      --radius-md: 18px;
+      --radius-lg: 28px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #0d1320;
+        --surface: #151f31;
+        --surface-soft: #1d293d;
+        --ink: #f6f8fb;
+        --muted: #c4cede;
+        --quiet: #aeb9ca;
+        --line: #45536a;
+        --line-strong: #a4b1c5;
+        --accent: #5eead4;
+        --accent-strong: #99f6e4;
+        --accent-soft: #173b3a;
+        --mastery: #95baf0;
+        --mastery-soft: #1d3556;
+        --current: #f4c967;
+        --current-soft: #493713;
+        --focus: #fbbf24;
+        --shadow: 0 18px 52px rgba(0, 0, 0, 0.3);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--page);
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-width: 320px;
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% -12%, var(--accent-soft), transparent 30rem),
+        var(--page);
+      font-family:
+        Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 100;
+      min-height: 44px;
+      padding: 10px 14px;
+      color: #ffffff;
+      background: #172034;
+      border-radius: var(--radius-sm);
+      transform: translateY(-180%);
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .shell {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 64px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 8px 0 24px;
+    }
+
+    .brand p,
+    .eyebrow,
+    .arc-index,
+    .stage-position {
+      margin: 0;
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .brand p,
+    .eyebrow,
+    .arc-index {
+      color: var(--accent-strong);
+    }
+
+    .brand strong {
+      display: block;
+      margin-top: 4px;
+      font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+      font-size: clamp(20px, 2.2vw, 28px);
+      letter-spacing: -0.02em;
+    }
+
+    .map-link {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 14px;
+      color: var(--accent-strong);
+      font-size: 14px;
+      font-weight: 800;
+      text-decoration: none;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      transition:
+        color 180ms ease,
+        background 180ms ease,
+        border-color 180ms ease;
+    }
+
+    .map-link:hover {
+      color: var(--surface);
+      background: var(--accent-strong);
+      border-color: var(--accent-strong);
+    }
+
+    .map-link svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .map-link:focus-visible,
+    .skip-link:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    .hero,
+    .metric-card,
+    .location-card,
+    .arc-block {
+      background: color-mix(in srgb, var(--surface) 97%, transparent);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 0.38fr);
+      gap: 40px;
+      align-items: end;
+      padding: clamp(28px, 5vw, 64px);
+      border-radius: var(--radius-lg);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 10px 0 16px;
+      font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+      font-size: clamp(38px, 6vw, 76px);
+      font-weight: 650;
+      letter-spacing: -0.045em;
+      line-height: 1.02;
+    }
+
+    .hero-copy {
+      max-width: 720px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: clamp(16px, 1.7vw, 19px);
+    }
+
+    .position-number {
+      text-align: right;
+    }
+
+    .position-number strong {
+      display: block;
+      color: var(--accent-strong);
+      font-family: ui-serif, Georgia, serif;
+      font-size: clamp(64px, 10vw, 120px);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.08em;
+      line-height: 0.84;
+    }
+
+    .position-number span {
+      display: block;
+      margin-top: 16px;
+      color: var(--quiet);
+      font-weight: 700;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .metric-card {
+      padding: clamp(24px, 3vw, 36px);
+      border-radius: var(--radius-md);
+    }
+
+    .metric-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .metric-head h2 {
+      margin-bottom: 4px;
+      font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+      font-size: clamp(24px, 3vw, 34px);
+    }
+
+    .metric-head strong {
+      font-size: clamp(30px, 4vw, 48px);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.05em;
+    }
+
+    .metric-card > p {
+      min-height: 52px;
+      margin: 8px 0 20px;
+      color: var(--muted);
+    }
+
+    .track {
+      position: relative;
+      height: 12px;
+      overflow: hidden;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+
+    .track span {
+      display: block;
+      width: var(--value);
+      height: 100%;
+      background: var(--accent);
+      border-radius: inherit;
+    }
+
+    .metric-card.mastery .track span {
+      background: var(--mastery);
+    }
+
+    .metric-foot {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px 16px;
+      margin-top: 12px;
+      color: var(--quiet);
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .location-card {
+      display: grid;
+      grid-template-columns: minmax(160px, 0.28fr) minmax(0, 1fr);
+      gap: 28px;
+      margin-top: 16px;
+      padding: clamp(24px, 3vw, 36px);
+      border-radius: var(--radius-md);
+    }
+
+    .location-card h2 {
+      margin: 6px 0 0;
+      font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+      font-size: 28px;
+    }
+
+    .location-copy strong {
+      display: block;
+      margin-bottom: 8px;
+      font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+      font-size: clamp(22px, 2.8vw, 32px);
+      line-height: 1.28;
+    }
+
+    .location-copy p {
+      margin-bottom: 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 16px;
+      margin-top: 40px;
+    }
+
+    .timeline-title {
+      margin: 0 0 4px;
+      font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+      font-size: clamp(30px, 4vw, 48px);
+      letter-spacing: -0.035em;
+    }
+
+    .timeline-intro {
+      max-width: 720px;
+      margin-bottom: 16px;
+      color: var(--muted);
+    }
+
+    .arc-block {
+      padding: clamp(22px, 3vw, 34px);
+      border-radius: var(--radius-md);
+      box-shadow: none;
+    }
+
+    .arc-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .arc-heading h2 {
+      margin: 4px 0 0;
+      font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+      font-size: clamp(22px, 3vw, 30px);
+    }
+
+    .arc-count {
+      min-width: 68px;
+      padding: 7px 12px;
+      color: var(--accent-strong);
+      text-align: center;
+      background: var(--accent-soft);
+      border-radius: 999px;
+      font-weight: 850;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .arc-summary {
+      max-width: 780px;
+      margin: 12px 0 24px;
+      color: var(--muted);
+    }
+
+    .stage-list {
+      display: grid;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .stage-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 14px;
+      padding: 0 0 24px;
+    }
+
+    .stage-item:last-child {
+      padding-bottom: 0;
+    }
+
+    .stage-item::before {
+      position: absolute;
+      top: 14px;
+      bottom: -2px;
+      left: 7px;
+      width: 2px;
+      content: "";
+      background: var(--line);
+    }
+
+    .stage-item:last-child::before {
+      display: none;
+    }
+
+    .stage-marker {
+      position: relative;
+      z-index: 1;
+      width: 16px;
+      height: 16px;
+      margin-top: 5px;
+      background: var(--surface);
+      border: 2px solid var(--line-strong);
+      border-radius: 50%;
+    }
+
+    .stage-item.mastered .stage-marker {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 3px var(--surface);
+    }
+
+    .stage-item.current .stage-marker {
+      background: var(--current);
+      border-color: var(--current);
+      box-shadow:
+        0 0 0 4px var(--current-soft),
+        inset 0 0 0 3px var(--surface);
+    }
+
+    .stage-copy {
+      min-width: 0;
+    }
+
+    .stage-position {
+      color: var(--quiet);
+    }
+
+    .stage-item.mastered .stage-position {
+      color: var(--accent-strong);
+    }
+
+    .stage-item.current .stage-position {
+      color: var(--current);
+    }
+
+    .stage-copy strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 17px;
+      line-height: 1.45;
+    }
+
+    .stage-copy p {
+      margin: 6px 0 0;
+      color: var(--quiet);
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .stage-item.future {
+      opacity: 0.72;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 28px 4px 0;
+      color: var(--quiet);
+      font-size: 13px;
+    }
+
+    @media (max-width: 760px) {
+      .shell {
+        width: min(100% - 20px, 720px);
+        padding-top: 10px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+      }
+
+      .brand strong {
+        font-size: 19px;
+      }
+
+      .map-link span {
+        display: none;
+      }
+
+      .map-link {
+        justify-content: center;
+        width: 44px;
+        padding: 8px;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 32px;
+        padding: 28px 22px;
+        border-radius: var(--radius-md);
+      }
+
+      .position-number {
+        text-align: left;
+      }
+
+      .position-number strong {
+        font-size: 72px;
+      }
+
+      .position-number span {
+        margin-top: 10px;
+      }
+
+      .metrics {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-card > p {
+        min-height: 0;
+      }
+
+      .location-card {
+        grid-template-columns: 1fr;
+      }
+
+      .arc-heading {
+        align-items: flex-start;
+      }
+
+      .footer {
+        display: grid;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.001ms !important;
+        animation-duration: 0.001ms !important;
+      }
+    }
+  </style>
+</head>
+<body
+  data-sml-progress="1"
+  data-course-id="{{COURSE_ID}}"
+  data-revision="{{REVISION}}"
+>
+  <a class="skip-link" href="#main">跳到学习进度</a>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <p>SOCRATIC READING SYSTEM</p>
+        <strong>{{COURSE_TITLE}}</strong>
+      </div>
+      <a class="map-link" href="{{MAP_HREF}}" aria-label="返回知识地图">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 6h5v5H4zM15 4h5v5h-5zM11 15h5v5h-5z"></path>
+          <path d="M9 8.5h6M17.5 9v6M9 9v8.5h2"></path>
+        </svg>
+        <span>返回知识地图</span>
+      </a>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">学习进度</p>
+          <h1 id="page-title">你在整本书中的位置</h1>
+          <p class="hero-copy">
+            阅读覆盖与真正掌握分开计算。读到这里，不等于已经能够独立复原这里的推理。
+          </p>
+        </div>
+        <div class="position-number" aria-label="当前位于第 {{CURRENT_POSITION}} 个阅读单元">
+          <strong>{{CURRENT_POSITION}}</strong>
+          <span>当前单元 / 共 {{READING_TOTAL}} 个</span>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="两类学习进度">
+        <article id="reading-progress" class="metric-card">
+          <div class="metric-head">
+            <div>
+              <p class="eyebrow">阅读位置</p>
+              <h2>完成的书本单元</h2>
+            </div>
+            <strong>{{READING_PERCENT}}%</strong>
+          </div>
+          <p>完成收束的单元才计入阅读覆盖；刚进入的内容只标记为学习中。</p>
+          <div
+            class="track"
+            role="progressbar"
+            aria-label="阅读完成进度"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="{{READING_PERCENT}}"
+            style="--value: {{READING_PERCENT}}%"
+          >
+            <span></span>
+          </div>
+          <div class="metric-foot">
+            <span>{{READING_COMPLETED}} 个已完成</span>
+            <span>{{READING_TOTAL}} 个总单元</span>
+          </div>
+        </article>
+
+        <article id="mastery-progress" class="metric-card mastery">
+          <div class="metric-head">
+            <div>
+              <p class="eyebrow">掌握进度</p>
+              <h2>可独立复原的推理</h2>
+            </div>
+            <strong>{{MASTERY_PERCENT}}%</strong>
+          </div>
+          <p>只有达到“可复原、可迁移或延时保持”的关系，才计入稳固掌握。</p>
+          <div
+            class="track"
+            role="progressbar"
+            aria-label="推理掌握进度"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="{{MASTERY_PERCENT}}"
+            style="--value: {{MASTERY_PERCENT}}%"
+          >
+            <span></span>
+          </div>
+          <div class="metric-foot">
+            <span>{{MASTERY_ROBUST}} / {{MASTERY_TOTAL}} 条可复原</span>
+            <span>{{MASTERY_ENGAGED}} 条至少理解</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="location-card" aria-labelledby="current-title">
+        <div>
+          <p class="eyebrow">当前所在</p>
+          <h2 id="current-title">{{CURRENT_ARC}}</h2>
+        </div>
+        <div class="location-copy">
+          <strong>{{CURRENT_QUESTION}}</strong>
+          <p>{{CURRENT_SOURCE}}</p>
+        </div>
+      </section>
+
+      <section id="reading-timeline" class="timeline" aria-labelledby="timeline-title">
+        <div>
+          <p class="eyebrow">全书路线</p>
+          <h2 id="timeline-title" class="timeline-title">每一阶段读到哪里</h2>
+          <p class="timeline-intro">
+            绿色表示已经完成收束，琥珀色表示正在学习；尚未进入的阶段只显示问题和原书位置。
+          </p>
+        </div>
+        {{ARC_ITEMS}}
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>已理解命题 {{MASTERED_NODES}} 个</span>
+      <span>阅读位置与掌握程度分别计算</span>
+    </footer>
+  </div>
+
+  <script type="application/json" id="progress-data">{{PROGRESS_DATA}}</script>
+</body>
+</html>

@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="分别查看作品阅读位置与局部关系掌握程度。">
+  <title>{{PAGE_TITLE}}</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --page: #f4f1e8;
+      --surface: #fffdf8;
+      --surface-soft: #ece9e0;
+      --ink: #18233a;
+      --muted: #536078;
+      --line: #a3a9b3;
+      --line-soft: #d5d6d8;
+      --accent: #0f766e;
+      --accent-strong: #0b5752;
+      --accent-soft: #e1f1ec;
+      --amber: #925500;
+      --amber-soft: #fff2cf;
+      --future: #697386;
+      --shadow: 0 18px 52px rgba(24, 35, 58, 0.10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #0e1524;
+        --surface: #161f31;
+        --surface-soft: #202b40;
+        --ink: #f3f5f9;
+        --muted: #b9c2d2;
+        --line: #748097;
+        --line-soft: #364258;
+        --accent: #64d5c8;
+        --accent-strong: #9ce8df;
+        --accent-soft: #183d3b;
+        --amber: #ffd18a;
+        --amber-soft: #4b3518;
+        --future: #aeb8c9;
+        --shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 88% 2%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 34rem),
+        var(--page);
+      color: var(--ink);
+      font-family: ui-serif, "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    a { color: var(--accent-strong); }
+    a:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--amber);
+      outline-offset: 4px;
+    }
+    .skip-link {
+      position: fixed;
+      left: 1rem;
+      top: 1rem;
+      z-index: 10;
+      padding: .65rem .9rem;
+      background: var(--ink);
+      color: var(--surface);
+      transform: translateY(-180%);
+    }
+    .skip-link:focus { transform: translateY(0); }
+    .shell { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
+    header { padding: 3.2rem 0 1.6rem; }
+    .back-link {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-weight: 700;
+      text-underline-offset: .22em;
+    }
+    .metric-label {
+      margin: 0;
+      color: var(--accent-strong);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { overflow-wrap: anywhere; }
+    h1 {
+      max-width: 18ch;
+      margin: .65rem 0 .55rem;
+      font-size: clamp(2rem, 5.2vw, 4rem);
+      line-height: 1.08;
+      letter-spacing: -.035em;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      margin: 1rem 0 2rem;
+    }
+    .metric {
+      padding: clamp(1.15rem, 3vw, 1.8rem);
+      border: 1px solid var(--line-soft);
+      border-radius: 1.1rem;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .metric-value {
+      display: flex;
+      align-items: baseline;
+      gap: .4rem;
+      margin: .4rem 0 .8rem;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: clamp(2.2rem, 7vw, 4.5rem);
+      font-weight: 850;
+      line-height: 1;
+    }
+    .metric-value small { color: var(--muted); font-size: .95rem; font-weight: 700; }
+    .track {
+      height: .75rem;
+      overflow: hidden;
+      border-radius: 99px;
+      background: var(--surface-soft);
+      outline: 1px solid var(--line-soft);
+    }
+    .fill {
+      width: calc(var(--value) * 1%);
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+    }
+    .metric.mastery .fill { background: var(--amber); }
+    .current-card {
+      display: grid;
+      grid-template-columns: minmax(9rem, .55fr) minmax(0, 1.45fr);
+      gap: 1.2rem;
+      margin-bottom: 2rem;
+      padding: 1.25rem;
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--amber);
+      border-radius: 1rem;
+      background: var(--amber-soft);
+    }
+    .current-card h2 { margin: .1rem 0; font-size: 1rem; }
+    .current-card strong { display: block; font-size: 1.18rem; line-height: 1.45; }
+    .current-card p { margin: .3rem 0 0; color: var(--muted); }
+    .section-head { margin: 3rem 0 1.15rem; }
+    .section-head h2 { margin: 0; font-size: clamp(1.55rem, 3vw, 2.35rem); }
+    .source-timeline { display: grid; gap: .8rem; margin-bottom: 3rem; }
+    .source-unit {
+      margin-left: calc(var(--depth) * 1.05rem);
+      border: 1px solid var(--line-soft);
+      border-radius: .9rem;
+      background: var(--surface);
+      box-shadow: 0 5px 18px rgba(24, 35, 58, .05);
+    }
+    .source-unit > summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 1rem;
+      min-height: 52px;
+      align-items: center;
+      padding: .8rem 1rem;
+      cursor: pointer;
+      list-style: none;
+    }
+    .source-unit > summary::-webkit-details-marker { display: none; }
+    .source-unit > summary::before {
+      content: "＋";
+      grid-row: 1 / span 2;
+      align-self: center;
+      margin-right: .7rem;
+      color: var(--accent-strong);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-weight: 900;
+    }
+    .source-unit[open] > summary::before { content: "−"; }
+    .source-unit.mastered { border-left: 4px solid var(--accent); }
+    .source-unit.current { border-left: 4px solid var(--amber); }
+    .unit-title { display: flex; align-items: baseline; gap: .55rem; }
+    .unit-title strong { font-size: 1rem; }
+    .unit-count {
+      color: var(--muted);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: .82rem;
+      white-space: nowrap;
+    }
+    .unit-body { padding: 0 1rem 1rem 2.7rem; }
+    .unit-body > p { margin: 0 0 .8rem; color: var(--muted); }
+    .question-list { display: grid; gap: .55rem; margin: 0; padding: 0; list-style: none; }
+    .question-list a {
+      display: grid;
+      grid-template-columns: 1.2rem minmax(0, 1fr);
+      gap: .65rem;
+      min-height: 44px;
+      align-items: start;
+      padding: .55rem .65rem;
+      border-radius: .55rem;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .question-list a:hover { background: var(--surface-soft); }
+    .status-dot {
+      width: .72rem;
+      height: .72rem;
+      margin-top: .48rem;
+      border: 2px solid var(--future);
+      border-radius: 50%;
+    }
+    .mastered .status-dot { border-color: var(--accent); background: var(--accent); }
+    .current .status-dot { border-color: var(--amber); background: var(--amber); }
+    .empty-note {
+      margin: 0;
+      color: var(--muted);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: .9rem;
+    }
+    @media (max-width: 720px) {
+      .metrics, .current-card { grid-template-columns: 1fr; }
+      .source-unit { margin-left: calc(var(--depth) * .45rem); }
+      .unit-body { padding-left: 1rem; }
+      h1 { max-width: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body
+  data-sml-progress="2"
+  data-course-id="{{COURSE_ID}}"
+  data-revision="{{REVISION}}"
+>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <header class="shell">
+    <a class="back-link" href="{{MAP_HREF}}#contents">← 返回原书目录</a>
+    <h1>{{COURSE_TITLE}} · 学习进度</h1>
+  </header>
+
+  <main id="main-content" class="shell">
+    <section class="metrics" aria-label="学习进度摘要">
+      <article id="reading-progress" class="metric">
+        <p class="metric-label">阅读位置</p>
+        <div class="metric-value">{{READING_PERCENT}}<small>% · {{READING_COMPLETED}} / {{READING_TOTAL}} 个问题</small></div>
+        <div class="track" role="progressbar" aria-label="阅读位置" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{READING_PERCENT}}">
+          <div class="fill" style="--value: {{READING_PERCENT}}"></div>
+        </div>
+      </article>
+      <article id="mastery-progress" class="metric mastery">
+        <p class="metric-label">掌握进度</p>
+        <div class="metric-value">{{MASTERY_PERCENT}}<small>% · {{MASTERY_ROBUST}} / {{MASTERY_TOTAL}} {{MASTERY_UNIT}}</small></div>
+        <div class="track" role="progressbar" aria-label="{{MASTERY_LABEL}}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{MASTERY_PERCENT}}">
+          <div class="fill" style="--value: {{MASTERY_PERCENT}}"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="current-card" aria-labelledby="current-title">
+      <div>
+        <p class="metric-label">当前位置</p>
+        <h2 id="current-title">{{CURRENT_UNIT}}</h2>
+      </div>
+      <div>
+        <strong>第 {{CURRENT_POSITION}} 问 · {{CURRENT_QUESTION}}</strong>
+        <p>{{CURRENT_SOURCE}}</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="source-title">
+      <div class="section-head">
+        <h2 id="source-title">原书进度</h2>
+      </div>
+      <div id="source-timeline" class="source-timeline">{{SOURCE_UNIT_ITEMS}}</div>
+    </section>
+  </main>
+
+  <script id="progress-data" type="application/json">{{PROGRESS_DATA}}</script>
+</body>
+</html>

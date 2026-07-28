@@ -1,0 +1,3067 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{PAGE_TITLE}}</title>
+  <style>
+    :root {
+      --page: #f5f3ed;
+      --canvas: #fbfaf6;
+      --chrome: #ffffff;
+      --ink: #172034;
+      --muted: #46536a;
+      --quiet: #68758b;
+      --line: #526176;
+      --line-soft: #c5cbd4;
+      --accent: #0f766e;
+      --accent-strong: #0b5b55;
+      --accent-soft: #e4f3ef;
+      --focus: #a54b00;
+      --shadow: rgba(19, 31, 52, 0.14);
+
+      --default-bg: #ffffff;
+      --default-fg: #172034;
+      --default-muted: #40506a;
+      --default-border: #526176;
+
+      --conclusion-bg: #102a43;
+      --conclusion-fg: #ffffff;
+      --conclusion-muted: #dce8f5;
+      --conclusion-border: #07182a;
+
+      --objection-bg: #fff1f0;
+      --objection-fg: #711c24;
+      --objection-muted: #7a2530;
+      --objection-border: #8b1e2d;
+
+      --boundary-bg: #fff4d6;
+      --boundary-fg: #5b3510;
+      --boundary-muted: #65401b;
+      --boundary-border: #8a4f00;
+
+      --junction-bg: #e8f1ff;
+      --junction-fg: #17325c;
+      --junction-muted: #294971;
+      --junction-border: #315e9e;
+
+      --junction-objection-bg: #ffebed;
+      --junction-objection-fg: #6d1721;
+      --junction-objection-muted: #76232c;
+      --junction-objection-border: #912332;
+
+      --junction-boundary-bg: #fff0c2;
+      --junction-boundary-fg: #553006;
+      --junction-boundary-muted: #654019;
+      --junction-boundary-border: #875200;
+
+      --transition-bg: #e7f1ee;
+      --transition-fg: #153b35;
+      --transition-muted: #30564f;
+      --transition-border: #2d6a61;
+
+      --question-fg: #182239;
+      --question-muted: #536078;
+      --arc-fg: #0f5d57;
+      --grid-dot: #d4d1c8;
+      --node-bg: var(--default-bg);
+      --node-fg: var(--default-fg);
+      --node-muted: var(--default-muted);
+      --node-border: var(--default-border);
+      --junction-surface-bg: var(--junction-bg);
+      --junction-surface-fg: var(--junction-fg);
+      --junction-surface-muted: var(--junction-muted);
+      --junction-surface-border: var(--junction-border);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #0d1320;
+        --canvas: #111a2a;
+        --chrome: #151f31;
+        --ink: #f6f8fb;
+        --muted: #c4cede;
+        --quiet: #aeb9ca;
+        --line: #a4b1c5;
+        --line-soft: #45536a;
+        --accent: #5eead4;
+        --accent-strong: #99f6e4;
+        --accent-soft: #173b3a;
+        --focus: #fbbf24;
+        --shadow: rgba(0, 0, 0, 0.34);
+
+        --default-bg: #182235;
+        --default-fg: #f7f8fb;
+        --default-muted: #c3cedd;
+        --default-border: #a0aec0;
+
+        --conclusion-bg: #d8e9ff;
+        --conclusion-fg: #0c2038;
+        --conclusion-muted: #29425f;
+        --conclusion-border: #f5f9ff;
+
+        --objection-bg: #4a2028;
+        --objection-fg: #fff1f2;
+        --objection-muted: #ffd1d6;
+        --objection-border: #ff9eaa;
+
+        --boundary-bg: #493713;
+        --boundary-fg: #fff6d8;
+        --boundary-muted: #ffe9a8;
+        --boundary-border: #f4c967;
+
+        --junction-bg: #1d3556;
+        --junction-fg: #f1f6ff;
+        --junction-muted: #c9ddfa;
+        --junction-border: #95baf0;
+
+        --junction-objection-bg: #51242d;
+        --junction-objection-fg: #fff1f3;
+        --junction-objection-muted: #ffd0d6;
+        --junction-objection-border: #ff9aa7;
+
+        --junction-boundary-bg: #4b3813;
+        --junction-boundary-fg: #fff5d6;
+        --junction-boundary-muted: #ffe9a3;
+        --junction-boundary-border: #efc560;
+
+        --transition-bg: #173b38;
+        --transition-fg: #edfffb;
+        --transition-muted: #c7f2e9;
+        --transition-border: #7dd3c7;
+
+        --question-fg: #f5f8fd;
+        --question-muted: #c3cede;
+        --arc-fg: #8ce9dc;
+        --grid-dot: #26334a;
+      }
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --page: #f5f3ed;
+      --canvas: #fbfaf6;
+      --chrome: #ffffff;
+      --ink: #172034;
+      --muted: #46536a;
+      --quiet: #68758b;
+      --line: #526176;
+      --line-soft: #c5cbd4;
+      --accent: #0f766e;
+      --accent-strong: #0b5b55;
+      --accent-soft: #e4f3ef;
+      --focus: #a54b00;
+      --shadow: rgba(19, 31, 52, 0.14);
+      --default-bg: #ffffff;
+      --default-fg: #172034;
+      --default-muted: #40506a;
+      --default-border: #526176;
+      --conclusion-bg: #102a43;
+      --conclusion-fg: #ffffff;
+      --conclusion-muted: #dce8f5;
+      --conclusion-border: #07182a;
+      --objection-bg: #fff1f0;
+      --objection-fg: #711c24;
+      --objection-muted: #7a2530;
+      --objection-border: #8b1e2d;
+      --boundary-bg: #fff4d6;
+      --boundary-fg: #5b3510;
+      --boundary-muted: #65401b;
+      --boundary-border: #8a4f00;
+      --junction-bg: #e8f1ff;
+      --junction-fg: #17325c;
+      --junction-muted: #294971;
+      --junction-border: #315e9e;
+      --junction-objection-bg: #ffebed;
+      --junction-objection-fg: #6d1721;
+      --junction-objection-muted: #76232c;
+      --junction-objection-border: #912332;
+      --junction-boundary-bg: #fff0c2;
+      --junction-boundary-fg: #553006;
+      --junction-boundary-muted: #654019;
+      --junction-boundary-border: #875200;
+      --transition-bg: #e7f1ee;
+      --transition-fg: #153b35;
+      --transition-muted: #30564f;
+      --transition-border: #2d6a61;
+      --question-fg: #182239;
+      --question-muted: #536078;
+      --arc-fg: #0f5d57;
+      --grid-dot: #d4d1c8;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #0d1320;
+      --canvas: #111a2a;
+      --chrome: #151f31;
+      --ink: #f6f8fb;
+      --muted: #c4cede;
+      --quiet: #aeb9ca;
+      --line: #a4b1c5;
+      --line-soft: #45536a;
+      --accent: #5eead4;
+      --accent-strong: #99f6e4;
+      --accent-soft: #173b3a;
+      --focus: #fbbf24;
+      --shadow: rgba(0, 0, 0, 0.34);
+      --default-bg: #182235;
+      --default-fg: #f7f8fb;
+      --default-muted: #c3cedd;
+      --default-border: #a0aec0;
+      --conclusion-bg: #d8e9ff;
+      --conclusion-fg: #0c2038;
+      --conclusion-muted: #29425f;
+      --conclusion-border: #f5f9ff;
+      --objection-bg: #4a2028;
+      --objection-fg: #fff1f2;
+      --objection-muted: #ffd1d6;
+      --objection-border: #ff9eaa;
+      --boundary-bg: #493713;
+      --boundary-fg: #fff6d8;
+      --boundary-muted: #ffe9a8;
+      --boundary-border: #f4c967;
+      --junction-bg: #1d3556;
+      --junction-fg: #f1f6ff;
+      --junction-muted: #c9ddfa;
+      --junction-border: #95baf0;
+      --junction-objection-bg: #51242d;
+      --junction-objection-fg: #fff1f3;
+      --junction-objection-muted: #ffd0d6;
+      --junction-objection-border: #ff9aa7;
+      --junction-boundary-bg: #4b3813;
+      --junction-boundary-fg: #fff5d6;
+      --junction-boundary-muted: #ffe9a3;
+      --junction-boundary-border: #efc560;
+      --transition-bg: #173b38;
+      --transition-fg: #edfffb;
+      --transition-muted: #c7f2e9;
+      --transition-border: #7dd3c7;
+      --question-fg: #f5f8fd;
+      --question-muted: #c3cede;
+      --arc-fg: #8ce9dc;
+      --grid-dot: #26334a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--page);
+      color: var(--ink);
+      font-family:
+        "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        system-ui, -apple-system, sans-serif;
+    }
+
+    button,
+    select {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .skip-link {
+      position: fixed;
+      z-index: 1000;
+      top: 8px;
+      left: 8px;
+      transform: translateY(-140%);
+      padding: 10px 14px;
+      border: 2px solid var(--focus);
+      border-radius: 8px;
+      background: var(--chrome);
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      width: 100%;
+      height: 100%;
+    }
+
+    .topbar {
+      position: relative;
+      z-index: 30;
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto auto;
+      align-items: center;
+      gap: 16px;
+      min-height: 72px;
+      padding: 10px 16px 10px 20px;
+      border-bottom: 1px solid var(--line-soft);
+      background: var(--chrome);
+      box-shadow: 0 4px 18px var(--shadow);
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      margin: 0 0 2px;
+      color: var(--accent-strong);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+    }
+
+    h1 {
+      overflow: hidden;
+      margin: 0;
+      font-family:
+        "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+      font-size: clamp(18px, 2vw, 24px);
+      font-weight: 700;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .progress-summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 190px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .progress-bar {
+      width: 104px;
+      height: 7px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 99px;
+      background: var(--page);
+    }
+
+    .progress-bar > span {
+      display: block;
+      width: var(--progress);
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .toolbar button,
+    .toolbar a,
+    .icon-button,
+    .outline-stage,
+    .inspector-close {
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--chrome);
+      cursor: pointer;
+      transition:
+        background-color 180ms ease,
+        border-color 180ms ease,
+        color 180ms ease;
+    }
+
+    .toolbar button,
+    .toolbar a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 650;
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .toolbar button:hover,
+    .toolbar a:hover,
+    .outline-stage:hover,
+    .inspector-close:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    [tabindex="0"]:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    .toolbar svg,
+    .inspector-close svg {
+      width: 19px;
+      height: 19px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+
+    .workspace {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      background: var(--canvas);
+    }
+
+    .canvas-heading {
+      position: absolute;
+      z-index: 12;
+      top: 14px;
+      left: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: calc(100% - 190px);
+      padding: 8px 12px;
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      background: color-mix(in srgb, var(--chrome) 94%, transparent);
+      color: var(--muted);
+      font-size: 12px;
+      box-shadow: 0 4px 14px var(--shadow);
+      pointer-events: none;
+    }
+
+    .canvas-heading strong {
+      color: var(--ink);
+    }
+
+    #graph-viewport {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+    }
+
+    #graph-viewport.dragging {
+      cursor: grabbing;
+    }
+
+    #graph-svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background-color: var(--canvas);
+      background-image:
+        radial-gradient(circle, var(--grid-dot) 1.25px, transparent 1.4px);
+      background-position: 0 0;
+      background-size: 28px 28px;
+    }
+
+    .system-rail {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 3;
+    }
+
+    .arc-bracket {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 2;
+    }
+
+    .arc-title {
+      fill: var(--arc-fg);
+      font-size: 17px;
+      font-weight: 750;
+      letter-spacing: 0.02em;
+    }
+
+    .arc-summary {
+      fill: var(--question-muted);
+      font-size: 13px;
+    }
+
+    .stage-marker {
+      fill: var(--chrome);
+      stroke: var(--accent);
+      stroke-width: 3;
+    }
+
+    .stage-marker.current {
+      fill: var(--focus);
+      stroke: var(--focus);
+    }
+
+    .stage-number {
+      fill: var(--accent-strong);
+      font-size: 13px;
+      font-weight: 800;
+      text-anchor: middle;
+    }
+
+    .stage-number.current {
+      fill: #ffffff;
+    }
+
+    .stage-question {
+      cursor: pointer;
+    }
+
+    .stage-question .question-kicker {
+      fill: var(--question-muted);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.07em;
+    }
+
+    .stage-question .question-text {
+      fill: var(--question-fg);
+      font-family:
+        "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .stage-question .question-rule {
+      stroke: var(--line);
+      stroke-width: 1.5;
+    }
+
+    .stage-question.selected .question-rule,
+    .stage-question.highlighted .question-rule {
+      stroke: var(--focus);
+      stroke-width: 4;
+    }
+
+    .stage-status {
+      fill: var(--question-muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .stage-proof-toggle {
+      cursor: pointer;
+    }
+
+    .stage-proof-toggle rect {
+      fill: var(--chrome);
+      stroke: var(--accent);
+      stroke-width: 1.5;
+    }
+
+    .stage-proof-toggle:hover rect,
+    .stage-proof-toggle:focus rect {
+      fill: var(--accent-soft);
+    }
+
+    .stage-proof-toggle text {
+      fill: var(--accent-strong);
+      font-size: 13px;
+      font-weight: 750;
+      text-anchor: middle;
+    }
+
+    .future-note {
+      fill: var(--question-muted);
+      font-size: 14px;
+    }
+
+    .transition-path {
+      fill: none;
+      stroke: var(--transition-border);
+      stroke-width: 3;
+      marker-end: url(#arrow-system);
+    }
+
+    .transition-group {
+      cursor: pointer;
+    }
+
+    .transition-surface {
+      fill: var(--transition-bg);
+      stroke: var(--transition-border);
+      stroke-width: 1.5;
+    }
+
+    .transition-label {
+      fill: var(--transition-fg);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .transition-text {
+      fill: var(--transition-muted);
+      font-size: 14px;
+    }
+
+    .transition-group.selected .transition-surface,
+    .transition-group.highlighted .transition-surface {
+      stroke: var(--focus);
+      stroke-width: 4;
+    }
+
+    .flow-line {
+      fill: none;
+      stroke: var(--line);
+      stroke-width: 2.4;
+      marker-end: url(#arrow-reason);
+    }
+
+    .flow-hit {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 18;
+      cursor: pointer;
+      pointer-events: stroke;
+    }
+
+    .flow-group.selected .flow-line,
+    .flow-group.highlighted .flow-line {
+      stroke: var(--focus);
+      stroke-width: 4;
+    }
+
+    .argument-node {
+      cursor: pointer;
+      --node-bg: var(--default-bg);
+      --node-fg: var(--default-fg);
+      --node-muted: var(--default-muted);
+      --node-border: var(--default-border);
+    }
+
+    .argument-node.objection {
+      --node-bg: var(--objection-bg);
+      --node-fg: var(--objection-fg);
+      --node-muted: var(--objection-muted);
+      --node-border: var(--objection-border);
+    }
+
+    .argument-node.boundary {
+      --node-bg: var(--boundary-bg);
+      --node-fg: var(--boundary-fg);
+      --node-muted: var(--boundary-muted);
+      --node-border: var(--boundary-border);
+    }
+
+    .argument-node.conclusion {
+      --node-bg: var(--conclusion-bg);
+      --node-fg: var(--conclusion-fg);
+      --node-muted: var(--conclusion-muted);
+      --node-border: var(--conclusion-border);
+    }
+
+    .node-surface {
+      fill: var(--node-bg);
+      stroke: var(--node-border);
+      stroke-width: 2;
+      filter: drop-shadow(0 6px 8px var(--shadow));
+    }
+
+    .node-title {
+      fill: var(--node-fg);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .node-type {
+      fill: var(--node-muted);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.06em;
+    }
+
+    .node-status {
+      fill: var(--node-muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .argument-node.current .node-surface {
+      stroke: var(--focus);
+      stroke-width: 4;
+    }
+
+    .argument-node.selected .node-surface,
+    .argument-node.highlighted .node-surface {
+      stroke: var(--focus);
+      stroke-width: 5;
+    }
+
+    .inference-junction {
+      cursor: pointer;
+      --junction-surface-bg: var(--junction-bg);
+      --junction-surface-fg: var(--junction-fg);
+      --junction-surface-muted: var(--junction-muted);
+      --junction-surface-border: var(--junction-border);
+    }
+
+    .inference-junction.objects {
+      --junction-surface-bg: var(--junction-objection-bg);
+      --junction-surface-fg: var(--junction-objection-fg);
+      --junction-surface-muted: var(--junction-objection-muted);
+      --junction-surface-border: var(--junction-objection-border);
+    }
+
+    .inference-junction.limits,
+    .inference-junction.responds {
+      --junction-surface-bg: var(--junction-boundary-bg);
+      --junction-surface-fg: var(--junction-boundary-fg);
+      --junction-surface-muted: var(--junction-boundary-muted);
+      --junction-surface-border: var(--junction-boundary-border);
+    }
+
+    .junction-surface {
+      fill: var(--junction-surface-bg);
+      stroke: var(--junction-surface-border);
+      stroke-width: 2;
+    }
+
+    .junction-kicker,
+    .junction-reference-label {
+      fill: var(--junction-surface-muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+    }
+
+    .junction-text {
+      fill: var(--junction-surface-fg);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .junction-reference {
+      fill: var(--junction-surface-fg);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .inference-junction.selected .junction-surface,
+    .inference-junction.highlighted .junction-surface {
+      stroke: var(--focus);
+      stroke-width: 4;
+    }
+
+    .subargument-toggle {
+      cursor: pointer;
+    }
+
+    .subargument-surface {
+      fill: var(--node-bg);
+      stroke: var(--node-border);
+      stroke-width: 1.5;
+    }
+
+    .subargument-toggle text {
+      fill: var(--node-fg);
+      font-size: 12px;
+      font-weight: 750;
+      text-anchor: middle;
+    }
+
+    .dimmed {
+      opacity: 0.24;
+    }
+
+    .zoom-controls {
+      position: absolute;
+      z-index: 14;
+      right: 16px;
+      bottom: 16px;
+      display: grid;
+      grid-template-columns: repeat(4, 44px);
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      background: var(--chrome);
+      box-shadow: 0 8px 22px var(--shadow);
+    }
+
+    .zoom-controls button {
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .zoom-controls button:hover {
+      border-color: var(--line);
+      background: var(--accent-soft);
+    }
+
+    .outline-panel {
+      position: absolute;
+      z-index: 40;
+      top: 10px;
+      left: 10px;
+      width: min(420px, calc(100% - 20px));
+      max-height: calc(100% - 20px);
+      overflow: auto;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--chrome);
+      box-shadow: 0 18px 44px var(--shadow);
+    }
+
+    .outline-panel[hidden] {
+      display: none;
+    }
+
+    .outline-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .outline-header h2,
+    .inspector h2 {
+      margin: 0;
+      font-family:
+        "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+      font-size: 21px;
+      line-height: 1.35;
+    }
+
+    .outline-arc {
+      margin: 18px 0 8px;
+      color: var(--accent-strong);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .outline-stage {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 8px;
+      width: 100%;
+      height: auto;
+      margin: 6px 0;
+      padding: 10px;
+      text-align: left;
+    }
+
+    .outline-stage .index {
+      color: var(--accent-strong);
+      font-weight: 800;
+    }
+
+    .outline-stage .label {
+      line-height: 1.45;
+    }
+
+    .outline-stage .state {
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .inspector {
+      position: absolute;
+      z-index: 45;
+      top: 14px;
+      right: 14px;
+      width: min(390px, calc(100% - 28px));
+      max-height: calc(100% - 28px);
+      overflow: auto;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--chrome);
+      box-shadow: 0 18px 44px var(--shadow);
+      transform: translateX(calc(100% + 28px));
+      opacity: 0;
+      pointer-events: none;
+      transition:
+        transform 200ms ease,
+        opacity 160ms ease;
+    }
+
+    .inspector.open {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .inspector-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 44px;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .inspector-close {
+      display: grid;
+      place-items: center;
+      padding: 0;
+    }
+
+    .inspector-label {
+      margin: 0 0 5px;
+      color: var(--accent-strong);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.07em;
+    }
+
+    .inspector-lead {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 14px 0;
+    }
+
+    .tag {
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 99px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .inspector-section {
+      padding: 13px 0;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .inspector-section h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+    }
+
+    .inspector-section p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+      overflow-wrap: anywhere;
+    }
+
+    .inspector-actions {
+      display: flex;
+      gap: 8px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .inspector-actions button {
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--accent);
+      border-radius: 9px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      cursor: pointer;
+      font-weight: 750;
+    }
+
+    .sr-only {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
+    }
+
+    @media (max-width: 840px) {
+      .topbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        min-height: 64px;
+        padding: 8px 10px 8px 14px;
+      }
+
+      .progress-summary {
+        display: none;
+      }
+
+      .toolbar button span,
+      .toolbar a span {
+        display: none;
+      }
+
+      .toolbar button,
+      .toolbar a {
+        padding: 8px;
+      }
+
+      .canvas-heading {
+        right: 10px;
+        left: 10px;
+        max-width: none;
+      }
+
+      .inspector {
+        top: auto;
+        right: 8px;
+        bottom: 8px;
+        left: 8px;
+        width: auto;
+        max-height: min(64%, 560px);
+        transform: translateY(calc(100% + 18px));
+      }
+
+      .inspector.open {
+        transform: translateY(0);
+      }
+
+      .zoom-controls {
+        right: 10px;
+        bottom: 10px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+  </style>
+</head>
+<body data-sml-version="6" data-course-id="{{COURSE_ID}}" data-revision="{{REVISION}}">
+  <a class="skip-link" href="#graph-viewport">跳到知识图</a>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <p class="eyebrow">SYSTEMATIC REASONING ATLAS</p>
+        <h1>{{COURSE_TITLE}}</h1>
+      </div>
+      <div class="progress-summary" aria-label="学习进度">
+        <div class="progress-bar" aria-hidden="true">
+          <span id="progress-fill"></span>
+        </div>
+        <span id="progress-text"></span>
+      </div>
+      <div class="toolbar" aria-label="图谱工具">
+        <a href="{{PROGRESS_HREF}}" aria-label="查看学习进度">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 19V9M12 19V5M19 19v-7"></path>
+          </svg>
+          <span>学习进度</span>
+        </a>
+        <button id="outline-toggle" type="button" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h2M4 12h2M4 18h2M9 6h11M9 12h11M9 18h11"></path>
+          </svg>
+          <span>问题目录</span>
+        </button>
+        <button id="locate-current" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="7"></circle>
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path>
+          </svg>
+          <span>定位当前</span>
+        </button>
+        <button id="theme-toggle" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+          </svg>
+          <span>主题</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <div class="canvas-heading" aria-hidden="true">
+        <strong>阅读方向</strong>
+        <span>向下＝问题被继续逼出；局部证明中，左边是结论，右边是理由。</span>
+      </div>
+
+      <nav id="outline-panel" class="outline-panel" aria-label="全书问题目录" hidden>
+        <div class="outline-header">
+          <div>
+            <p class="inspector-label">全书主链</p>
+            <h2 id="outline-title"></h2>
+          </div>
+          <button id="outline-close" class="inspector-close" type="button" aria-label="关闭问题目录">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18"></path>
+            </svg>
+          </button>
+        </div>
+        <div id="outline-list"></div>
+      </nav>
+
+      <div id="graph-viewport" tabindex="0" aria-label="可拖动、可缩放的《纯粹理性批判》系统论证图">
+        <svg id="graph-svg" role="img" aria-labelledby="graph-title graph-description">
+          <title id="graph-title">《纯粹理性批判》的系统问题推进图</title>
+          <desc id="graph-description">从上到下读取问题推进；展开任一问题后，从右向左读取理由、推理关节与结论。</desc>
+          <defs id="graph-defs">
+            <marker id="arrow-reason" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+            </marker>
+            <marker id="arrow-system" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+            </marker>
+          </defs>
+          <g id="graph-camera">
+            <g id="arc-layer"></g>
+            <g id="system-flow-layer"></g>
+            <g id="flow-layer"></g>
+            <g id="inference-layer"></g>
+            <g id="node-layer"></g>
+            <g id="stage-layer"></g>
+          </g>
+        </svg>
+      </div>
+
+      <div class="zoom-controls" aria-label="缩放控制">
+        <button id="zoom-out" type="button" aria-label="缩小">−</button>
+        <button id="zoom-in" type="button" aria-label="放大">＋</button>
+        <button id="fit-system" type="button" aria-label="查看全书主链">⌂</button>
+        <button id="collapse-proof" type="button" aria-label="收起所有证明">×</button>
+      </div>
+
+      <aside id="inspector" class="inspector" aria-labelledby="inspector-title">
+        <div class="inspector-head">
+          <div>
+            <p id="inspector-label" class="inspector-label">图谱说明</p>
+            <h2 id="inspector-title">选择一个问题、命题或推理</h2>
+          </div>
+          <button id="inspector-close" class="inspector-close" type="button" aria-label="关闭详情">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18"></path>
+            </svg>
+          </button>
+        </div>
+        <p id="inspector-lead" class="inspector-lead"></p>
+        <div id="inspector-tags" class="tag-list"></div>
+        <section class="inspector-section">
+          <h3 id="inspector-detail-heading">为什么在这里</h3>
+          <p id="inspector-detail"></p>
+        </section>
+        <section class="inspector-section">
+          <h3>原文依据</h3>
+          <p id="inspector-source"></p>
+        </section>
+        <section class="inspector-section">
+          <h3>掌握证据</h3>
+          <p id="inspector-mastery"></p>
+        </section>
+        <div id="inspector-actions" class="inspector-actions"></div>
+      </aside>
+
+      <section id="accessible-outline" class="sr-only" aria-label="知识图的线性文字版本"></section>
+    </main>
+  </div>
+
+  <script type="application/json" id="graph-data">{{GRAPH_DATA}}</script>
+  <script>
+    (() => {
+      "use strict";
+
+      const data = JSON.parse(
+        document.getElementById("graph-data").textContent
+      );
+      const atlas = data.argument_atlas;
+      const spine = atlas.system_spine;
+      const stages = [...spine.stages].sort(
+        (first, second) => first.position - second.position
+      );
+      const arcs = [...spine.arcs].sort(
+        (first, second) => first.position - second.position
+      );
+      const transitions = spine.transitions;
+      const nodeById = new Map(data.nodes.map((node) => [node.id, node]));
+      const mapById = new Map(atlas.maps.map((map) => [map.id, map]));
+      const inferenceById = new Map(
+        atlas.inferences.map((inference) => [inference.id, inference])
+      );
+      const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+      const stageByAnswer = new Map(
+        stages
+          .filter((stage) => stage.answer_id)
+          .map((stage) => [stage.answer_id, stage])
+      );
+      const stageByMap = new Map(
+        stages.map((stage) => [stage.map_id, stage])
+      );
+      const transitionById = new Map(
+        transitions.map((transition) => [transition.id, transition])
+      );
+      const arcById = new Map(arcs.map((arc) => [arc.id, arc]));
+      const childrenByParent = new Map();
+      atlas.maps.forEach((argumentMap) => {
+        if (!argumentMap.parent_id || !argumentMap.entry_node_id) return;
+        const siblings = childrenByParent.get(argumentMap.parent_id) || [];
+        siblings.push(argumentMap);
+        childrenByParent.set(argumentMap.parent_id, siblings);
+      });
+
+      const elements = {
+        graphViewport: document.getElementById("graph-viewport"),
+        graphSvg: document.getElementById("graph-svg"),
+        graphCamera: document.getElementById("graph-camera"),
+        arcLayer: document.getElementById("arc-layer"),
+        systemFlowLayer: document.getElementById("system-flow-layer"),
+        flowLayer: document.getElementById("flow-layer"),
+        inferenceLayer: document.getElementById("inference-layer"),
+        nodeLayer: document.getElementById("node-layer"),
+        stageLayer: document.getElementById("stage-layer"),
+        outlineToggle: document.getElementById("outline-toggle"),
+        outlinePanel: document.getElementById("outline-panel"),
+        outlineClose: document.getElementById("outline-close"),
+        outlineTitle: document.getElementById("outline-title"),
+        outlineList: document.getElementById("outline-list"),
+        locateCurrent: document.getElementById("locate-current"),
+        themeToggle: document.getElementById("theme-toggle"),
+        zoomOut: document.getElementById("zoom-out"),
+        zoomIn: document.getElementById("zoom-in"),
+        fitSystem: document.getElementById("fit-system"),
+        collapseProof: document.getElementById("collapse-proof"),
+        inspector: document.getElementById("inspector"),
+        inspectorClose: document.getElementById("inspector-close"),
+        inspectorLabel: document.getElementById("inspector-label"),
+        inspectorTitle: document.getElementById("inspector-title"),
+        inspectorLead: document.getElementById("inspector-lead"),
+        inspectorTags: document.getElementById("inspector-tags"),
+        inspectorDetailHeading: document.getElementById("inspector-detail-heading"),
+        inspectorDetail: document.getElementById("inspector-detail"),
+        inspectorSource: document.getElementById("inspector-source"),
+        inspectorMastery: document.getElementById("inspector-mastery"),
+        inspectorActions: document.getElementById("inspector-actions"),
+        accessibleOutline: document.getElementById("accessible-outline"),
+        progressFill: document.getElementById("progress-fill"),
+        progressText: document.getElementById("progress-text")
+      };
+
+      const statusLabels = {
+        mastered: "已掌握",
+        current: "正在学习",
+        future: "尚未学习"
+      };
+      const roleLabels = {
+        conclusion: "本题结论",
+        intermediate: "中间结论",
+        premise: "直接理由",
+        objection: "关键反驳",
+        boundary: "适用边界"
+      };
+      const inferenceKindLabels = {
+        supports: "因为这些理由",
+        objects: "这个反驳表明",
+        responds: "回应反驳以后",
+        limits: "只在这个范围内"
+      };
+      const masteryLabels = {
+        unassessed: "关系尚未检验",
+        understood: "能够看图解释",
+        reconstructable: "能够脱离图复原",
+        transferable: "能够迁移应用",
+        retained: "延时后仍能复原"
+      };
+
+      let expandedStageId = "";
+      const expandedMapIds = new Set();
+      let selectedNodeId = "";
+      let selectedInferenceId = "";
+      let selectedStageId = "";
+      let selectedTransitionId = "";
+      let currentLayout = null;
+      let currentGraph = null;
+      let view = { x: 0, y: 0, scale: 1 };
+      let pan = null;
+      let suppressNextClick = false;
+
+      function svgElement(name, attributes = {}) {
+        const element = document.createElementNS(
+          "http://www.w3.org/2000/svg",
+          name
+        );
+        Object.entries(attributes).forEach(([key, value]) => {
+          element.setAttribute(key, String(value));
+        });
+        return element;
+      }
+
+      function glyphWidthFactor(char) {
+        if (/[\u2e80-\u9fff\uf900-\ufaff]/u.test(char)) return 1;
+        if (/\s/u.test(char)) return 0.34;
+        if (/[ilI1|.,:;'"`!]/u.test(char)) return 0.34;
+        if (/[MW@#%&]/u.test(char)) return 0.9;
+        if (/[A-Z0-9]/u.test(char)) return 0.64;
+        return 0.56;
+      }
+
+      function estimateTextWidth(value, fontSize = 16) {
+        return [...String(value)].reduce(
+          (width, char) => width + glyphWidthFactor(char) * fontSize,
+          0
+        );
+      }
+
+      function textTokens(value) {
+        const result = [];
+        let latin = "";
+        const flush = () => {
+          if (latin) result.push(latin);
+          latin = "";
+        };
+        [...String(value)].forEach((char) => {
+          if (/[\u2e80-\u9fff\uf900-\ufaff]/u.test(char)) {
+            flush();
+            result.push(char);
+          } else if (/\s/u.test(char)) {
+            flush();
+            result.push(char);
+          } else {
+            latin += char;
+          }
+        });
+        flush();
+        return result;
+      }
+
+      function breakToken(token, maxWidth, fontSize) {
+        const parts = [];
+        let part = "";
+        [...token].forEach((char) => {
+          if (
+            part &&
+            estimateTextWidth(part + char, fontSize) > maxWidth
+          ) {
+            parts.push(part);
+            part = char;
+          } else {
+            part += char;
+          }
+        });
+        if (part) parts.push(part);
+        return parts;
+      }
+
+      function wrapTextToWidth(value, maxWidth, fontSize = 16) {
+        const lines = [];
+        let line = "";
+        textTokens(value).forEach((token) => {
+          const parts =
+            estimateTextWidth(token, fontSize) > maxWidth
+              ? breakToken(token, maxWidth, fontSize)
+              : [token];
+          parts.forEach((part) => {
+            const candidate = line + part;
+            if (
+              line &&
+              estimateTextWidth(candidate, fontSize) > maxWidth
+            ) {
+              lines.push(line.trimEnd());
+              line = part.trimStart();
+            } else {
+              line = candidate;
+            }
+          });
+        });
+        if (line || !lines.length) lines.push(line.trimEnd());
+        return lines;
+      }
+
+      function appendWrappedText(textElement, lines, x, y, lineHeight) {
+        lines.forEach((line, index) => {
+          const tspan = svgElement("tspan", {
+            x,
+            y: y + index * lineHeight
+          });
+          tspan.textContent = line;
+          textElement.appendChild(tspan);
+        });
+      }
+
+      function stageQuestionMetrics(stage) {
+        const width = 520;
+        const fontSize = 24;
+        const lines = wrapTextToWidth(
+          stage.question,
+          width - 12,
+          fontSize
+        );
+        return {
+          width,
+          height: 48 + lines.length * 34 + 58,
+          fontSize,
+          lineHeight: 34,
+          lines,
+          titleY: 63
+        };
+      }
+
+      function transitionMetrics(transition) {
+        const width = 560;
+        const fontSize = 14;
+        const lines = wrapTextToWidth(
+          transition.bridge,
+          width - 40,
+          fontSize
+        );
+        return {
+          width,
+          height: 54 + lines.length * 22,
+          fontSize,
+          lineHeight: 22,
+          lines,
+          titleY: 55
+        };
+      }
+
+      function nodeMetrics(node, role = "premise", hasSubmap = false) {
+        const width = role === "conclusion" ? 360 : 316;
+        const fontSize = 16;
+        const lines = wrapTextToWidth(
+          node.title,
+          width - 38,
+          fontSize
+        );
+        const height =
+          58 +
+          Math.max(1, lines.length) * 24 +
+          (hasSubmap ? 54 : 20);
+        return {
+          width,
+          height,
+          fontSize,
+          lineHeight: 24,
+          lines,
+          titleY: 52,
+          hasSubmap
+        };
+      }
+
+      function referenceLabel(nodeId) {
+        const stage = stageByAnswer.get(nodeId);
+        const node = nodeById.get(nodeId);
+        if (!stage || !node) return node?.title || nodeId;
+        return `第 ${stage.position} 问的结论：${node.title}`;
+      }
+
+      function inferenceMetrics(inference, visibleNodeIds) {
+        const width = 286;
+        const fontSize = 13;
+        const lines = wrapTextToWidth(
+          inference.bridge,
+          width - 34,
+          fontSize
+        );
+        const referenceIds = inference.premise_ids.filter(
+          (nodeId) => !visibleNodeIds.has(nodeId)
+        );
+        const referenceText = referenceIds
+          .map(referenceLabel)
+          .join("；");
+        const referenceLines = referenceText
+          ? wrapTextToWidth(referenceText, width - 34, 12)
+          : [];
+        const referenceHeight = referenceLines.length
+          ? 30 + referenceLines.length * 19
+          : 0;
+        return {
+          width,
+          height:
+            58 +
+            Math.max(1, lines.length) * 20 +
+            referenceHeight,
+          fontSize,
+          lineHeight: 20,
+          lines,
+          titleY: 49,
+          referenceIds,
+          referenceLines,
+          referenceY:
+            61 + Math.max(1, lines.length) * 20
+        };
+      }
+
+      function removeExpandedBranch(mapId) {
+        expandedMapIds.delete(mapId);
+        (childrenByParent.get(mapId) || []).forEach((child) =>
+          removeExpandedBranch(child.id)
+        );
+      }
+
+      function composeArgumentGraph(rootMap) {
+        const nodeIds = [];
+        const nodeIdSet = new Set();
+        const mapIds = [];
+        const inferences = [];
+        const childByEntry = new Map();
+        const canonicalElsewhere = new Set(
+          stages
+            .filter(
+              (stage) =>
+                stage.answer_id &&
+                stage.id !== expandedStageId
+            )
+            .map((stage) => stage.answer_id)
+        );
+
+        const visit = (argumentMap) => {
+          mapIds.push(argumentMap.id);
+          argumentMap.node_ids.forEach((nodeId) => {
+            if (canonicalElsewhere.has(nodeId)) return;
+            if (!nodeIdSet.has(nodeId)) {
+              nodeIdSet.add(nodeId);
+              nodeIds.push(nodeId);
+            }
+          });
+          atlas.inferences
+            .filter((inference) => inference.map_id === argumentMap.id)
+            .forEach((inference) => inferences.push(inference));
+          (childrenByParent.get(argumentMap.id) || []).forEach((child) => {
+            if (canonicalElsewhere.has(child.entry_node_id)) return;
+            childByEntry.set(child.entry_node_id, child);
+            if (expandedMapIds.has(child.id)) visit(child);
+          });
+        };
+        visit(rootMap);
+        return {
+          mapIds,
+          nodeIds,
+          nodeIdSet,
+          nodes: nodeIds.map((id) => nodeById.get(id)).filter(Boolean),
+          inferences,
+          childByEntry
+        };
+      }
+
+      function argumentRoles(argumentMap, nodes, inferences) {
+        const produced = new Set(
+          inferences.map((inference) => inference.conclusion_id)
+        );
+        const used = new Set(
+          inferences.flatMap((inference) => inference.premise_ids)
+        );
+        const roles = new Map();
+        nodes.forEach((node) => {
+          let role = "premise";
+          if (node.id === argumentMap.conclusion_id) role = "conclusion";
+          else if (node.node_type === "objection") role = "objection";
+          else if (node.node_type === "boundary") role = "boundary";
+          else if (produced.has(node.id) && used.has(node.id)) {
+            role = "intermediate";
+          }
+          roles.set(node.id, role);
+        });
+        return roles;
+      }
+
+      function argumentLayout(
+        argumentMap,
+        nodes,
+        inferences,
+        childEntryIds = new Set()
+      ) {
+        const items = new Map();
+        const visibleNodeIds = new Set(nodes.map((node) => node.id));
+        const roles = argumentRoles(argumentMap, nodes, inferences);
+        nodes.forEach((node) => {
+          const role = roles.get(node.id) || "premise";
+          items.set(node.id, {
+            id: node.id,
+            kind: "node",
+            data: node,
+            role,
+            metrics: nodeMetrics(
+              node,
+              role,
+              childEntryIds.has(node.id)
+            )
+          });
+        });
+        inferences.forEach((inference) => {
+          items.set(inference.id, {
+            id: inference.id,
+            kind: "inference",
+            data: inference,
+            role: inference.kind,
+            metrics: inferenceMetrics(inference, visibleNodeIds)
+          });
+        });
+
+        const rank = new Map([[argumentMap.conclusion_id, 0]]);
+        for (let pass = 0; pass < items.size * 2; pass += 1) {
+          let changed = false;
+          inferences.forEach((inference) => {
+            if (!rank.has(inference.conclusion_id)) return;
+            const inferenceRank = rank.get(inference.conclusion_id) + 1;
+            if (
+              !rank.has(inference.id) ||
+              rank.get(inference.id) < inferenceRank
+            ) {
+              rank.set(inference.id, inferenceRank);
+              changed = true;
+            }
+            inference.premise_ids
+              .filter((premiseId) => visibleNodeIds.has(premiseId))
+              .forEach((premiseId) => {
+                const premiseRank = inferenceRank + 1;
+                if (
+                  !rank.has(premiseId) ||
+                  rank.get(premiseId) < premiseRank
+                ) {
+                  rank.set(premiseId, premiseRank);
+                  changed = true;
+                }
+              });
+          });
+          if (!changed) break;
+        }
+        let fallbackRank = Math.max(0, ...rank.values()) + 1;
+        items.forEach((_, id) => {
+          if (!rank.has(id)) {
+            rank.set(id, fallbackRank);
+            fallbackRank += 1;
+          }
+        });
+
+        const targets = new Map();
+        inferences.forEach((inference) => {
+          targets.set(inference.id, [inference.conclusion_id]);
+          inference.premise_ids
+            .filter((premiseId) => visibleNodeIds.has(premiseId))
+            .forEach((premiseId) => {
+              const linked = targets.get(premiseId) || [];
+              linked.push(inference.id);
+              targets.set(premiseId, linked);
+            });
+        });
+
+        const columns = new Map();
+        items.forEach((item, id) => {
+          const itemRank = rank.get(id);
+          const values = columns.get(itemRank) || [];
+          values.push(item);
+          columns.set(itemRank, values);
+        });
+        const orderedRanks = [...columns.keys()].sort((a, b) => a - b);
+        const orderIndex = new Map();
+        const nodeOrder = new Map(
+          argumentMap.node_ids.map((nodeId, index) => [nodeId, index])
+        );
+        orderedRanks.forEach((itemRank) => {
+          const values = columns.get(itemRank);
+          values.sort((first, second) => {
+            const average = (item) => {
+              const linked = targets.get(item.id) || [];
+              const indices = linked
+                .map((id) => orderIndex.get(id))
+                .filter((value) => Number.isFinite(value));
+              if (indices.length) {
+                return indices.reduce((sum, value) => sum + value, 0) /
+                  indices.length;
+              }
+              return nodeOrder.get(item.id) ?? 999;
+            };
+            return (
+              average(first) - average(second) ||
+              first.id.localeCompare(second.id)
+            );
+          });
+          values.forEach((item, index) => orderIndex.set(item.id, index));
+        });
+
+        const xByRank = new Map();
+        let nextX = 0;
+        orderedRanks.forEach((itemRank) => {
+          xByRank.set(itemRank, nextX);
+          const maxWidth = Math.max(
+            ...columns.get(itemRank).map((item) => item.metrics.width)
+          );
+          nextX += maxWidth + 150;
+        });
+
+        const columnHeights = new Map();
+        orderedRanks.forEach((itemRank) => {
+          const values = columns.get(itemRank);
+          const height =
+            values.reduce((sum, item) => sum + item.metrics.height, 0) +
+            Math.max(0, values.length - 1) * 70;
+          columnHeights.set(itemRank, height);
+        });
+        const maxColumnHeight = Math.max(0, ...columnHeights.values());
+        const positions = new Map();
+        orderedRanks.forEach((itemRank) => {
+          const values = columns.get(itemRank);
+          let y = (maxColumnHeight - columnHeights.get(itemRank)) / 2;
+          values.forEach((item) => {
+            positions.set(item.id, {
+              x: xByRank.get(itemRank),
+              y,
+              width: item.metrics.width,
+              height: item.metrics.height,
+              metrics: item.metrics,
+              kind: item.kind,
+              role: item.role
+            });
+            y += item.metrics.height + 70;
+          });
+        });
+
+        const flows = [];
+        inferences.forEach((inference) => {
+          inference.premise_ids
+            .filter((premiseId) => visibleNodeIds.has(premiseId))
+            .forEach((premiseId) => {
+              flows.push({
+                id: `flow-${inference.id}-${premiseId}`,
+                inferenceId: inference.id,
+                from: premiseId,
+                to: inference.id
+              });
+            });
+          if (
+            items.has(inference.conclusion_id) &&
+            items.has(inference.id)
+          ) {
+            flows.push({
+              id: `flow-${inference.id}-conclusion`,
+              inferenceId: inference.id,
+              from: inference.id,
+              to: inference.conclusion_id
+            });
+          }
+        });
+
+        return {
+          positions,
+          flows,
+          roles,
+          width: Math.max(360, nextX - 80),
+          height: Math.max(140, maxColumnHeight)
+        };
+      }
+
+      function systemLayout() {
+        const positions = new Map();
+        const roles = new Map();
+        const flows = [];
+        const stageFrames = new Map();
+        const transitionFrames = new Map();
+        const arcFrames = new Map();
+        let y = 120;
+        let width = 1180;
+        let activeArcId = "";
+        let activeArcFrame = null;
+        currentGraph = null;
+
+        stages.forEach((stage, index) => {
+          if (stage.arc_id !== activeArcId) {
+            if (activeArcFrame) {
+              activeArcFrame.endY = y - 38;
+              arcFrames.set(activeArcId, activeArcFrame);
+            }
+            activeArcId = stage.arc_id;
+            const arc = arcById.get(activeArcId);
+            activeArcFrame = {
+              arc,
+              startY: y,
+              endY: y
+            };
+            y += 86;
+          }
+
+          const question = stageQuestionMetrics(stage);
+          const frame = {
+            stage,
+            x: 240,
+            y,
+            question,
+            answerId: stage.answer_id,
+            expanded: stage.id === expandedStageId
+          };
+          const answerTop = y + question.height + 22;
+          let stageBottom = answerTop + 48;
+
+          if (stage.answer_id) {
+            const answer = nodeById.get(stage.answer_id);
+            if (frame.expanded) {
+              const rootMap = mapById.get(stage.map_id);
+              currentGraph = composeArgumentGraph(rootMap);
+              const visibleArgument = {
+                ...rootMap,
+                node_ids: currentGraph.nodeIds
+              };
+              const local = argumentLayout(
+                visibleArgument,
+                currentGraph.nodes,
+                currentGraph.inferences,
+                new Set(currentGraph.childByEntry.keys())
+              );
+              const conclusion = local.positions.get(stage.answer_id);
+              const dx = 240 - (conclusion?.x || 0);
+              const dy = answerTop;
+              local.positions.forEach((position, id) => {
+                positions.set(id, {
+                  ...position,
+                  x: position.x + dx,
+                  y: position.y + dy
+                });
+              });
+              local.roles.forEach((role, id) => roles.set(id, role));
+              local.flows.forEach((flow) => flows.push(flow));
+              frame.argument = local;
+              frame.graph = currentGraph;
+              stageBottom = answerTop + local.height + 56;
+              width = Math.max(width, 240 + local.width + 160);
+            } else if (answer) {
+              const metrics = nodeMetrics(answer, "conclusion", false);
+              positions.set(answer.id, {
+                x: 240,
+                y: answerTop,
+                width: metrics.width,
+                height: metrics.height,
+                metrics,
+                kind: "node",
+                role: "conclusion"
+              });
+              roles.set(answer.id, "conclusion");
+              stageBottom = answerTop + metrics.height + 54;
+            }
+          } else {
+            stageBottom = answerTop + 62;
+          }
+
+          frame.bottom = stageBottom;
+          frame.markerY = y + 30;
+          stageFrames.set(stage.id, frame);
+          if (activeArcFrame) activeArcFrame.endY = stageBottom;
+
+          const transition = transitions[index];
+          if (transition) {
+            const metrics = transitionMetrics(transition);
+            const transitionY = stageBottom + 30;
+            transitionFrames.set(transition.id, {
+              transition,
+              x: 240,
+              y: transitionY,
+              metrics
+            });
+            y = transitionY + metrics.height + 56;
+            if (activeArcFrame) activeArcFrame.endY = y - 30;
+          } else {
+            y = stageBottom + 70;
+          }
+        });
+
+        if (activeArcFrame) {
+          activeArcFrame.endY = y - 40;
+          arcFrames.set(activeArcId, activeArcFrame);
+        }
+
+        return {
+          positions,
+          roles,
+          flows,
+          stageFrames,
+          transitionFrames,
+          arcFrames,
+          width,
+          height: y + 80
+        };
+      }
+
+      function flowPath(source, target) {
+        const startX = source.x;
+        const startY = source.y + source.height / 2;
+        const endX = target.x + target.width;
+        const endY = target.y + target.height / 2;
+        const bend = Math.max(56, Math.abs(startX - endX) * 0.4);
+        return (
+          `M${startX},${startY} ` +
+          `C${startX - bend},${startY} ` +
+          `${endX + bend},${endY} ${endX},${endY}`
+        );
+      }
+
+      function createFlow(flow) {
+        const source = currentLayout.positions.get(flow.from);
+        const target = currentLayout.positions.get(flow.to);
+        if (!source || !target) return;
+        const pathData = flowPath(source, target);
+        const group = svgElement("g", {
+          class: "flow-group",
+          "data-inference-id": flow.inferenceId
+        });
+        const path = svgElement("path", {
+          class: "flow-line",
+          d: pathData
+        });
+        const hit = svgElement("path", {
+          class: "flow-hit",
+          d: pathData,
+          tabindex: "0",
+          role: "button",
+          "data-interactive": "true",
+          "aria-label": "选择这一步推理"
+        });
+        const activate = (event) => {
+          event.stopPropagation();
+          selectInference(flow.inferenceId);
+        };
+        hit.addEventListener("click", activate);
+        hit.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            activate(event);
+          }
+        });
+        group.append(path, hit);
+        elements.flowLayer.appendChild(group);
+      }
+
+      function createInference(inference) {
+        const position = currentLayout.positions.get(inference.id);
+        if (!position) return;
+        const group = svgElement("g", {
+          class: `inference-junction ${inference.kind}`,
+          transform: `translate(${position.x},${position.y})`,
+          "data-inference-id": inference.id,
+          "data-interactive": "true",
+          tabindex: "0",
+          role: "button",
+          "aria-label": `推理复原：${inference.bridge}`
+        });
+        const rect = svgElement("rect", {
+          class: "junction-surface",
+          width: position.width,
+          height: position.height,
+          rx: 13
+        });
+        const kicker = svgElement("text", {
+          class: "junction-kicker",
+          x: 17,
+          y: 23
+        });
+        kicker.textContent =
+          inferenceKindLabels[inference.kind] || "因为这些理由";
+        const text = svgElement("text", {
+          class: "junction-text"
+        });
+        appendWrappedText(
+          text,
+          position.metrics.lines,
+          17,
+          position.metrics.titleY,
+          position.metrics.lineHeight
+        );
+        group.append(rect, kicker, text);
+
+        if (position.metrics.referenceLines.length) {
+          const label = svgElement("text", {
+            class: "junction-reference-label",
+            x: 17,
+            y: position.metrics.referenceY
+          });
+          label.textContent = "调用已经建立的结论";
+          const references = svgElement("text", {
+            class: "junction-reference"
+          });
+          appendWrappedText(
+            references,
+            position.metrics.referenceLines,
+            17,
+            position.metrics.referenceY + 23,
+            19
+          );
+          group.append(label, references);
+        }
+
+        const activate = (event) => {
+          event.stopPropagation();
+          selectInference(inference.id);
+        };
+        group.addEventListener("click", activate);
+        group.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            activate(event);
+          }
+        });
+        elements.inferenceLayer.appendChild(group);
+      }
+
+      function childMapForNode(nodeId) {
+        return currentGraph?.childByEntry.get(nodeId) || null;
+      }
+
+      function createNode(node, role) {
+        const position = currentLayout.positions.get(node.id);
+        if (!position) return;
+        const childMap = childMapForNode(node.id);
+        const childExpanded = Boolean(
+          childMap && expandedMapIds.has(childMap.id)
+        );
+        const group = svgElement("g", {
+          class: [
+            "argument-node",
+            role,
+            node.node_type,
+            node.status
+          ].join(" "),
+          transform: `translate(${position.x},${position.y})`,
+          "data-node-id": node.id,
+          "data-interactive": "true",
+          tabindex: "0",
+          role: "button",
+          "aria-label": `${roleLabels[role] || "命题"}：${node.title}`
+        });
+        const title = svgElement("title");
+        title.textContent = node.title;
+        const rect = svgElement("rect", {
+          class: "node-surface",
+          width: position.width,
+          height: position.height,
+          rx: 14
+        });
+        const type = svgElement("text", {
+          class: "node-type",
+          x: 19,
+          y: 24
+        });
+        type.textContent = roleLabels[role] || "命题";
+        const text = svgElement("text", {
+          class: "node-title"
+        });
+        appendWrappedText(
+          text,
+          position.metrics.lines,
+          19,
+          position.metrics.titleY,
+          position.metrics.lineHeight
+        );
+        const status = svgElement("text", {
+          class: "node-status",
+          x: 19,
+          y: position.height - 17
+        });
+        status.textContent = statusLabels[node.status] || "";
+        group.append(title, rect, type, text, status);
+
+        if (childMap) {
+          const triggerWidth = 132;
+          const triggerHeight = 40;
+          const trigger = svgElement("g", {
+            class:
+              `subargument-toggle ${childExpanded ? "expanded" : ""}`,
+            transform:
+              `translate(${position.width - triggerWidth - 12},` +
+              `${position.height - triggerHeight - 8})`,
+            tabindex: "0",
+            role: "button",
+            "data-interactive": "true",
+            "aria-expanded": String(childExpanded),
+            "aria-label":
+              `${childExpanded ? "收起" : "展开"}子论证：` +
+              `${childMap.question}`
+          });
+          const triggerRect = svgElement("rect", {
+            class: "subargument-surface",
+            width: triggerWidth,
+            height: triggerHeight,
+            rx: 8
+          });
+          const triggerText = svgElement("text", {
+            x: triggerWidth / 2,
+            y: 25
+          });
+          triggerText.textContent = childExpanded
+            ? "收起子论证  −"
+            : "展开子论证  ＋";
+          const toggle = (event) => {
+            event.stopPropagation();
+            toggleSubargument(childMap, node.id);
+          };
+          trigger.addEventListener("click", toggle);
+          trigger.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggle(event);
+            }
+          });
+          trigger.append(triggerRect, triggerText);
+          group.appendChild(trigger);
+        }
+
+        const activate = (event) => {
+          event.stopPropagation();
+          if (suppressNextClick) {
+            suppressNextClick = false;
+            return;
+          }
+          selectNode(node.id);
+        };
+        group.addEventListener("click", activate);
+        group.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            activate(event);
+          }
+        });
+        elements.nodeLayer.appendChild(group);
+      }
+
+      function createArc(frame) {
+        const { arc, startY, endY } = frame;
+        const bracket = svgElement("path", {
+          class: "arc-bracket",
+          d:
+            `M88,${startY + 42} H112 ` +
+            `V${endY - 16} H88`
+        });
+        const title = svgElement("text", {
+          class: "arc-title",
+          x: 146,
+          y: startY + 26
+        });
+        title.textContent = arc.title;
+        const summaryLines = wrapTextToWidth(arc.summary, 620, 13);
+        const summary = svgElement("text", {
+          class: "arc-summary"
+        });
+        appendWrappedText(summary, summaryLines, 146, startY + 51, 19);
+        elements.arcLayer.append(bracket, title, summary);
+      }
+
+      function createStage(frame) {
+        const { stage, question } = frame;
+        const marker = svgElement("circle", {
+          class: `stage-marker ${stage.status}`,
+          cx: 124,
+          cy: frame.markerY,
+          r: 20
+        });
+        const number = svgElement("text", {
+          class: `stage-number ${stage.status}`,
+          x: 124,
+          y: frame.markerY + 5
+        });
+        number.textContent = stage.position;
+        elements.stageLayer.append(marker, number);
+
+        const group = svgElement("g", {
+          class: "stage-question",
+          transform: `translate(${frame.x},${frame.y})`,
+          "data-stage-id": stage.id,
+          "data-interactive": "true",
+          tabindex: "0",
+          role: "button",
+          "aria-label": `第 ${stage.position} 问：${stage.question}`
+        });
+        const kicker = svgElement("text", {
+          class: "question-kicker",
+          x: 0,
+          y: 18
+        });
+        kicker.textContent =
+          `${arcById.get(stage.arc_id)?.title || "问题链"} · ` +
+          `第 ${stage.position} 问`;
+        const text = svgElement("text", {
+          class: "question-text"
+        });
+        appendWrappedText(
+          text,
+          question.lines,
+          0,
+          question.titleY,
+          question.lineHeight
+        );
+        const ruleY = question.height - 52;
+        const rule = svgElement("line", {
+          class: "question-rule",
+          x1: 0,
+          y1: ruleY,
+          x2: question.width,
+          y2: ruleY
+        });
+        const state = svgElement("text", {
+          class: "stage-status",
+          x: 0,
+          y: question.height - 20
+        });
+        state.textContent = statusLabels[stage.status] || "";
+        group.append(kicker, text, rule, state);
+
+        if (stage.answer_id) {
+          const buttonWidth = 148;
+          const buttonHeight = 44;
+          const trigger = svgElement("g", {
+            class: "stage-proof-toggle",
+            transform:
+              `translate(${question.width - buttonWidth},` +
+              `${question.height - buttonHeight - 4})`,
+            "data-interactive": "true",
+            tabindex: "0",
+            role: "button",
+            "aria-expanded": String(frame.expanded),
+            "aria-label":
+              `${frame.expanded ? "收起" : "展开"}第 ${stage.position} 问的证明`
+          });
+          const triggerRect = svgElement("rect", {
+            width: buttonWidth,
+            height: buttonHeight,
+            rx: 9
+          });
+          const triggerText = svgElement("text", {
+            x: buttonWidth / 2,
+            y: 28
+          });
+          triggerText.textContent = frame.expanded
+            ? "收起本题证明 −"
+            : "展开本题证明 ＋";
+          const toggle = (event) => {
+            event.stopPropagation();
+            toggleStageProof(stage.id);
+          };
+          trigger.addEventListener("click", toggle);
+          trigger.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggle(event);
+            }
+          });
+          trigger.append(triggerRect, triggerText);
+          group.appendChild(trigger);
+        } else {
+          const future = svgElement("text", {
+            class: "future-note",
+            x: 0,
+            y: question.height + 22
+          });
+          future.textContent =
+            "答案尚未展开：读到并审校相关原文后，才进入主图。";
+          group.appendChild(future);
+        }
+
+        const activate = (event) => {
+          event.stopPropagation();
+          selectStage(stage.id);
+        };
+        group.addEventListener("click", activate);
+        group.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            activate(event);
+          }
+        });
+        elements.stageLayer.appendChild(group);
+      }
+
+      function createTransition(frame, nextFrame) {
+        const { transition, metrics } = frame;
+        const railX = 124;
+        const path = svgElement("path", {
+          class: "transition-path",
+          d:
+            `M${railX},${frame.y - 18} ` +
+            `V${nextFrame.markerY - 27}`
+        });
+        elements.systemFlowLayer.appendChild(path);
+
+        const group = svgElement("g", {
+          class: "transition-group",
+          transform: `translate(${frame.x},${frame.y})`,
+          "data-transition-id": transition.id,
+          "data-interactive": "true",
+          tabindex: "0",
+          role: "button",
+          "aria-label": `${transition.label}：${transition.bridge}`
+        });
+        const rect = svgElement("rect", {
+          class: "transition-surface",
+          width: metrics.width,
+          height: metrics.height,
+          rx: 12
+        });
+        const label = svgElement("text", {
+          class: "transition-label",
+          x: 20,
+          y: 25
+        });
+        label.textContent = transition.label;
+        const text = svgElement("text", {
+          class: "transition-text"
+        });
+        appendWrappedText(
+          text,
+          metrics.lines,
+          20,
+          metrics.titleY,
+          metrics.lineHeight
+        );
+        const activate = (event) => {
+          event.stopPropagation();
+          selectTransition(transition.id);
+        };
+        group.addEventListener("click", activate);
+        group.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            activate(event);
+          }
+        });
+        group.append(rect, label, text);
+        elements.systemFlowLayer.appendChild(group);
+      }
+
+      function clearGraph() {
+        elements.arcLayer.replaceChildren();
+        elements.systemFlowLayer.replaceChildren();
+        elements.flowLayer.replaceChildren();
+        elements.inferenceLayer.replaceChildren();
+        elements.nodeLayer.replaceChildren();
+        elements.stageLayer.replaceChildren();
+      }
+
+      function captureNodeAnchor(nodeId) {
+        const position = currentLayout?.positions.get(nodeId);
+        if (!position) return null;
+        const rect = elements.graphViewport.getBoundingClientRect();
+        return {
+          nodeId,
+          x:
+            rect.left +
+            view.x +
+            (position.x + position.width / 2) * view.scale,
+          y:
+            rect.top +
+            view.y +
+            (position.y + position.height / 2) * view.scale
+        };
+      }
+
+      function restoreAnchor(anchor) {
+        if (!anchor) return false;
+        const position = currentLayout.positions.get(anchor.nodeId);
+        if (!position) return false;
+        const rect = elements.graphViewport.getBoundingClientRect();
+        view = {
+          ...view,
+          x:
+            anchor.x -
+            rect.left -
+            (position.x + position.width / 2) * view.scale,
+          y:
+            anchor.y -
+            rect.top -
+            (position.y + position.height / 2) * view.scale
+        };
+        applyView();
+        return true;
+      }
+
+      function renderSystem({ anchor = null, preserveView = false } = {}) {
+        clearGraph();
+        currentLayout = systemLayout();
+        currentLayout.arcFrames.forEach(createArc);
+        currentLayout.stageFrames.forEach(createStage);
+        transitions.forEach((transition, index) => {
+          const frame = currentLayout.transitionFrames.get(transition.id);
+          const nextStage = stages[index + 1];
+          const nextFrame = currentLayout.stageFrames.get(nextStage?.id);
+          if (frame && nextFrame) createTransition(frame, nextFrame);
+        });
+        currentLayout.flows.forEach(createFlow);
+        if (currentGraph) {
+          currentGraph.inferences.forEach(createInference);
+        }
+        const renderedNodeIds = new Set();
+        currentLayout.positions.forEach((_, nodeId) => {
+          const node = nodeById.get(nodeId);
+          if (!node || renderedNodeIds.has(nodeId)) return;
+          renderedNodeIds.add(nodeId);
+          createNode(
+            node,
+            currentLayout.roles.get(nodeId) || "premise"
+          );
+        });
+        applyHighlights();
+        if (!restoreAnchor(anchor) && !preserveView) {
+          requestAnimationFrame(fitWholeSystem);
+        } else {
+          applyView();
+        }
+      }
+
+      function toggleStageProof(stageId) {
+        const stage = stageById.get(stageId);
+        if (!stage?.answer_id) {
+          selectStage(stageId);
+          return;
+        }
+        const anchor = captureNodeAnchor(stage.answer_id);
+        if (expandedStageId === stageId) {
+          expandedStageId = "";
+          expandedMapIds.clear();
+        } else {
+          expandedStageId = stageId;
+          expandedMapIds.clear();
+        }
+        renderSystem({ anchor, preserveView: true });
+      }
+
+      function toggleSubargument(childMap, nodeId) {
+        const anchor = captureNodeAnchor(nodeId);
+        if (expandedMapIds.has(childMap.id)) {
+          removeExpandedBranch(childMap.id);
+        } else {
+          (childrenByParent.get(childMap.parent_id) || [])
+            .filter((sibling) => sibling.id !== childMap.id)
+            .forEach((sibling) => removeExpandedBranch(sibling.id));
+          expandedMapIds.add(childMap.id);
+        }
+        renderSystem({ anchor, preserveView: true });
+      }
+
+      function clearSelection() {
+        selectedNodeId = "";
+        selectedInferenceId = "";
+        selectedStageId = "";
+        selectedTransitionId = "";
+      }
+
+      function openInspector() {
+        elements.inspector.classList.add("open");
+      }
+
+      function closeInspector() {
+        elements.inspector.classList.remove("open");
+      }
+
+      function setInspector({
+        label,
+        title,
+        lead,
+        tags,
+        detailHeading = "为什么在这里",
+        detail,
+        source,
+        mastery,
+        actions = []
+      }) {
+        elements.inspectorLabel.textContent = label;
+        elements.inspectorTitle.textContent = title;
+        elements.inspectorLead.textContent = lead || "";
+        elements.inspectorTags.replaceChildren();
+        tags.forEach((value) => {
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.textContent = value;
+          elements.inspectorTags.appendChild(tag);
+        });
+        elements.inspectorDetailHeading.textContent = detailHeading;
+        elements.inspectorDetail.textContent = detail || "暂无补充说明。";
+        elements.inspectorSource.textContent =
+          source || "来源锚点将在审校后补充。";
+        elements.inspectorMastery.textContent =
+          mastery || "尚未记录掌握证据。";
+        elements.inspectorActions.replaceChildren();
+        actions.forEach(({ label: actionLabel, run }) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = actionLabel;
+          button.addEventListener("click", run);
+          elements.inspectorActions.appendChild(button);
+        });
+        openInspector();
+      }
+
+      function evidenceText(node) {
+        if (!node.evidence) {
+          return `${statusLabels[node.status] || "尚未评估"}。` +
+            `掌握标准：${node.mastery_criterion || "能够用自己的话复原理由与后果。"}`;
+        }
+        const answer =
+          node.evidence.answer ||
+          node.evidence.text ||
+          node.evidence.response ||
+          "";
+        return (
+          `${statusLabels[node.status] || "已记录"}。` +
+          `${answer ? `你的证据：“${answer}”` : "已有回答证据。"} ` +
+          `掌握标准：${node.mastery_criterion || "能够复原完整连接。"}`
+        );
+      }
+
+      function selectNode(nodeId) {
+        const node = nodeById.get(nodeId);
+        if (!node) return;
+        clearSelection();
+        selectedNodeId = nodeId;
+        const stage = stageByAnswer.get(nodeId);
+        setInspector({
+          label: roleLabels[currentLayout.roles.get(nodeId)] || "命题",
+          title: node.title,
+          lead: node.summary,
+          tags: [
+            "命题复述 · 非原文引语",
+            statusLabels[node.status] || "尚未评估",
+            stage ? `系统主链第 ${stage.position} 问` : "局部证明"
+          ],
+          detail: `${node.detail || ""}${node.bridge ? ` ${node.bridge}` : ""}`,
+          source: node.source,
+          mastery: evidenceText(node),
+          actions: stage
+            ? [{
+                label: expandedStageId === stage.id
+                  ? "收起本题证明"
+                  : "展开本题证明",
+                run: () => toggleStageProof(stage.id)
+              }]
+            : []
+        });
+        applyHighlights();
+      }
+
+      function selectInference(inferenceId) {
+        const inference = inferenceById.get(inferenceId);
+        if (!inference) return;
+        clearSelection();
+        selectedInferenceId = inferenceId;
+        const premiseTitles = inference.premise_ids
+          .map((id) => nodeById.get(id)?.title)
+          .filter(Boolean);
+        const conclusion = nodeById.get(inference.conclusion_id);
+        const sentence =
+          `因为${premiseTitles.join("；并且")}，` +
+          `所以${conclusion?.title || "得到这个结论"}。`;
+        setInspector({
+          label: inferenceKindLabels[inference.kind] || "推理关节",
+          title: inference.bridge,
+          lead: sentence,
+          tags: [
+            "论证复原 · 非原文箭头",
+            `${inference.premise_ids.length} 个必要理由`,
+            masteryLabels[inference.mastery_level] || "关系尚未检验"
+          ],
+          detailHeading: "这一步怎样成立",
+          detail:
+            `前提：${premiseTitles.join("；")}。` +
+            `结论：${conclusion?.title || ""}。`,
+          source: inference.source,
+          mastery:
+            masteryLabels[inference.mastery_level] ||
+            "尚未检验你能否独立复原这一步。"
+        });
+        applyHighlights();
+      }
+
+      function selectStage(stageId) {
+        const stage = stageById.get(stageId);
+        if (!stage) return;
+        clearSelection();
+        selectedStageId = stageId;
+        const answer = nodeById.get(stage.answer_id);
+        const proofMap = mapById.get(stage.map_id);
+        setInspector({
+          label: `系统主链 · 第 ${stage.position} 问`,
+          title: stage.question,
+          lead: answer
+            ? `目前建立的回答：${answer.title}`
+            : "这个问题尚未进入来源审校和正式教学。",
+          tags: [
+            statusLabels[stage.status] || "尚未学习",
+            "问题标题 · 不是命题节点",
+            stage.origin === "reviewed" ? "结构已审校" : "迁移结构"
+          ],
+          detailHeading: "它在全书中承担什么任务",
+          detail: proofMap?.summary || "等待学习到这里后再展开答案。",
+          source: stage.source,
+          mastery: answer
+            ? evidenceText(answer)
+            : "未来问题不提前暴露答案，也不伪造掌握状态。",
+          actions: answer
+            ? [{
+                label: expandedStageId === stage.id
+                  ? "收起本题证明"
+                  : "展开本题证明",
+                run: () => toggleStageProof(stage.id)
+              }]
+            : []
+        });
+        applyHighlights();
+      }
+
+      function selectTransition(transitionId) {
+        const transition = transitionById.get(transitionId);
+        if (!transition) return;
+        clearSelection();
+        selectedTransitionId = transitionId;
+        const from = stageById.get(transition.from_stage_id);
+        const to = stageById.get(transition.to_stage_id);
+        setInspector({
+          label: transition.label,
+          title: transition.bridge,
+          lead:
+            `第 ${from.position} 问的结果改变了问题条件，` +
+            `因此进入第 ${to.position} 问。`,
+          tags: [
+            "系统推进关系",
+            "结构复原 · 非原文箭头",
+            transition.origin === "reviewed" ? "已审校" : "迁移结构"
+          ],
+          detailHeading: "为什么不能停在上一问",
+          detail:
+            `上一问：${from.question} 下一问：${to.question}`,
+          source: transition.source,
+          mastery:
+            "当你能不看图说出“上一结论为什么迫使我们继续追问”，" +
+            "这条系统连接才算真正掌握。"
+        });
+        applyHighlights();
+      }
+
+      function applyHighlights() {
+        const selectedIds = new Set();
+        let selectedInference = null;
+        if (selectedNodeId) selectedIds.add(selectedNodeId);
+        if (selectedInferenceId) {
+          selectedInference = inferenceById.get(selectedInferenceId);
+          selectedInference?.premise_ids.forEach((id) =>
+            selectedIds.add(id)
+          );
+          if (selectedInference?.conclusion_id) {
+            selectedIds.add(selectedInference.conclusion_id);
+          }
+        }
+        const selectedTransition = transitionById.get(selectedTransitionId);
+        const hasSelection = Boolean(
+          selectedNodeId ||
+          selectedInferenceId ||
+          selectedStageId ||
+          selectedTransitionId
+        );
+
+        document.querySelectorAll(".argument-node").forEach((group) => {
+          const id = group.dataset.nodeId;
+          group.classList.toggle("selected", id === selectedNodeId);
+          group.classList.toggle(
+            "highlighted",
+            selectedInferenceId && selectedIds.has(id)
+          );
+          group.classList.toggle(
+            "dimmed",
+            Boolean(selectedInferenceId) && !selectedIds.has(id)
+          );
+        });
+        document.querySelectorAll(".inference-junction").forEach((group) => {
+          const id = group.dataset.inferenceId;
+          group.classList.toggle("selected", id === selectedInferenceId);
+          group.classList.toggle(
+            "dimmed",
+            Boolean(selectedInferenceId) && id !== selectedInferenceId
+          );
+        });
+        document.querySelectorAll(".flow-group").forEach((group) => {
+          const match =
+            group.dataset.inferenceId === selectedInferenceId;
+          group.classList.toggle("highlighted", match);
+          group.classList.toggle(
+            "dimmed",
+            Boolean(selectedInferenceId) && !match
+          );
+        });
+        document.querySelectorAll(".stage-question").forEach((group) => {
+          const id = group.dataset.stageId;
+          const transitionMatch = selectedTransition && (
+            id === selectedTransition.from_stage_id ||
+            id === selectedTransition.to_stage_id
+          );
+          group.classList.toggle("selected", id === selectedStageId);
+          group.classList.toggle("highlighted", Boolean(transitionMatch));
+          group.classList.toggle(
+            "dimmed",
+            hasSelection &&
+            Boolean(selectedTransitionId) &&
+            !transitionMatch
+          );
+        });
+        document.querySelectorAll(".transition-group").forEach((group) => {
+          group.classList.toggle(
+            "selected",
+            group.dataset.transitionId === selectedTransitionId
+          );
+        });
+      }
+
+      function applyView() {
+        elements.graphCamera.setAttribute(
+          "transform",
+          `translate(${view.x},${view.y}) scale(${view.scale})`
+        );
+      }
+
+      function setZoomAt(nextScale, clientX, clientY) {
+        const bounded = Math.min(2.2, Math.max(0.16, nextScale));
+        const rect = elements.graphViewport.getBoundingClientRect();
+        const pointerX = clientX - rect.left;
+        const pointerY = clientY - rect.top;
+        const worldX = (pointerX - view.x) / view.scale;
+        const worldY = (pointerY - view.y) / view.scale;
+        view = {
+          scale: bounded,
+          x: pointerX - worldX * bounded,
+          y: pointerY - worldY * bounded
+        };
+        applyView();
+      }
+
+      function zoomFromCenter(factor) {
+        const rect = elements.graphViewport.getBoundingClientRect();
+        setZoomAt(
+          view.scale * factor,
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2
+        );
+      }
+
+      function fitWholeSystem() {
+        if (!currentLayout) return;
+        const rect = elements.graphViewport.getBoundingClientRect();
+        const padding = 72;
+        const scale = Math.min(
+          1,
+          (rect.width - padding * 2) / currentLayout.width,
+          (rect.height - padding * 2) / currentLayout.height
+        );
+        view = {
+          scale: Math.max(0.16, scale),
+          x: (rect.width - currentLayout.width * scale) / 2,
+          y: (rect.height - currentLayout.height * scale) / 2
+        };
+        applyView();
+      }
+
+      function jumpToStage(stageId, { focusNode = false } = {}) {
+        const frame = currentLayout?.stageFrames.get(stageId);
+        if (!frame) return;
+        const rect = elements.graphViewport.getBoundingClientRect();
+        const isCompact = rect.width < 600;
+        const targetScale = isCompact
+          ? 0.68
+          : Math.min(1.05, Math.max(0.72, view.scale));
+        const targetX = frame.x + 260;
+        const targetY = frame.y + Math.min(260, frame.bottom - frame.y) / 2;
+        view = {
+          scale: targetScale,
+          x: isCompact
+            ? 16 - frame.x * targetScale
+            : rect.width * 0.38 - targetX * targetScale,
+          y: rect.height * 0.3 - targetY * targetScale
+        };
+        applyView();
+        if (focusNode && frame.answerId) {
+          document
+            .querySelector(`[data-node-id="${frame.answerId}"]`)
+            ?.focus();
+        }
+      }
+
+      function locateCurrentLearning() {
+        let stage = stageByMap.get(data.current.map_id);
+        if (!stage) {
+          stage = stages.find((item) => {
+            const argumentMap = mapById.get(item.map_id);
+            return argumentMap?.node_ids.includes(data.current.node_id);
+          });
+        }
+        if (!stage) {
+          stage = stages.find((item) => item.status === "current");
+        }
+        if (!stage) return;
+        expandedStageId = stage.answer_id ? stage.id : "";
+        expandedMapIds.clear();
+        renderSystem({ preserveView: true });
+        requestAnimationFrame(() => {
+          jumpToStage(stage.id);
+          if (currentLayout.positions.has(data.current.node_id)) {
+            selectNode(data.current.node_id);
+          } else {
+            selectStage(stage.id);
+          }
+        });
+      }
+
+      function renderOutline() {
+        elements.outlineTitle.textContent = spine.title;
+        elements.outlineList.replaceChildren();
+        arcs.forEach((arc) => {
+          const heading = document.createElement("div");
+          heading.className = "outline-arc";
+          heading.textContent = arc.title;
+          elements.outlineList.appendChild(heading);
+          arc.stage_ids.forEach((stageId) => {
+            const stage = stageById.get(stageId);
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "outline-stage";
+            button.innerHTML =
+              `<span class="index">${stage.position}</span>` +
+              `<span class="label"></span>` +
+              `<span class="state"></span>`;
+            button.querySelector(".label").textContent = stage.question;
+            button.querySelector(".state").textContent =
+              statusLabels[stage.status] || "";
+            button.addEventListener("click", () => {
+              elements.outlinePanel.hidden = true;
+              elements.outlineToggle.setAttribute("aria-expanded", "false");
+              jumpToStage(stage.id);
+              selectStage(stage.id);
+            });
+            elements.outlineList.appendChild(button);
+          });
+        });
+      }
+
+      function renderAccessibleOutline() {
+        const heading = document.createElement("h2");
+        heading.textContent = spine.title;
+        const goal = document.createElement("p");
+        goal.textContent = `最终掌握标准：${spine.terminal_mastery}`;
+        const list = document.createElement("ol");
+        stages.forEach((stage, index) => {
+          const item = document.createElement("li");
+          const answer = nodeById.get(stage.answer_id);
+          item.textContent =
+            `${stage.question} ` +
+            `${answer ? `回答：${answer.title}` : "答案尚未展开。"} ` +
+            `${transitions[index] ? `${transitions[index].label}：${transitions[index].bridge}` : ""}`;
+          list.appendChild(item);
+        });
+        elements.accessibleOutline.replaceChildren(heading, goal, list);
+      }
+
+      function renderProgress() {
+        const counts = data.progress.nodes;
+        const total = counts.mastered + counts.current + counts.future;
+        const ratio = total ? (counts.mastered / total) * 100 : 0;
+        elements.progressFill.style.setProperty(
+          "--progress",
+          `${ratio.toFixed(1)}%`
+        );
+        elements.progressText.textContent =
+          `${counts.mastered} / ${total} 个命题已掌握`;
+      }
+
+      function toggleOutline(open) {
+        const next =
+          typeof open === "boolean"
+            ? open
+            : elements.outlinePanel.hidden;
+        elements.outlinePanel.hidden = !next;
+        elements.outlineToggle.setAttribute(
+          "aria-expanded",
+          String(next)
+        );
+        if (next) {
+          closeInspector();
+          elements.outlineClose.focus();
+        }
+      }
+
+      function setTheme(mode) {
+        if (mode === "system") {
+          delete document.documentElement.dataset.theme;
+        } else {
+          document.documentElement.dataset.theme = mode;
+        }
+        elements.themeToggle.dataset.mode = mode;
+        const label = {
+          system: "主题：跟随系统",
+          light: "主题：浅色",
+          dark: "主题：深色"
+        }[mode];
+        elements.themeToggle.setAttribute("aria-label", label);
+        elements.themeToggle.title = label;
+      }
+
+      function cycleTheme() {
+        const current = elements.themeToggle.dataset.mode || "system";
+        const next = current === "system"
+          ? "light"
+          : current === "light"
+            ? "dark"
+            : "system";
+        setTheme(next);
+      }
+
+      elements.graphViewport.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        if (event.target.closest?.("[data-interactive='true']")) return;
+        pan = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          viewX: view.x,
+          viewY: view.y,
+          dragging: false
+        };
+      });
+
+      elements.graphViewport.addEventListener("pointermove", (event) => {
+        if (!pan || pan.pointerId !== event.pointerId) return;
+        const dx = event.clientX - pan.startX;
+        const dy = event.clientY - pan.startY;
+        if (!pan.dragging && Math.hypot(dx, dy) >= 6) {
+          pan.dragging = true;
+          elements.graphViewport.setPointerCapture(event.pointerId);
+          elements.graphViewport.classList.add("dragging");
+        }
+        if (!pan.dragging) return;
+        view.x = pan.viewX + dx;
+        view.y = pan.viewY + dy;
+        applyView();
+      });
+
+      function finishPan(event) {
+        if (!pan || pan.pointerId !== event.pointerId) return;
+        if (
+          pan.dragging &&
+          elements.graphViewport.hasPointerCapture(event.pointerId)
+        ) {
+          elements.graphViewport.releasePointerCapture(event.pointerId);
+        }
+        if (pan.dragging) suppressNextClick = true;
+        elements.graphViewport.classList.remove("dragging");
+        pan = null;
+      }
+
+      elements.graphViewport.addEventListener("pointerup", finishPan);
+      elements.graphViewport.addEventListener("pointercancel", finishPan);
+      elements.graphViewport.addEventListener(
+        "wheel",
+        (event) => {
+          event.preventDefault();
+          const factor = Math.exp(-event.deltaY * 0.0014);
+          setZoomAt(
+            view.scale * factor,
+            event.clientX,
+            event.clientY
+          );
+        },
+        { passive: false }
+      );
+
+      elements.graphViewport.addEventListener("click", (event) => {
+        if (suppressNextClick) {
+          suppressNextClick = false;
+          return;
+        }
+        if (event.target.closest?.("[data-interactive='true']")) return;
+        clearSelection();
+        closeInspector();
+        applyHighlights();
+      });
+
+      elements.graphViewport.addEventListener("keydown", (event) => {
+        const move = 44;
+        if (event.key === "ArrowLeft") view.x += move;
+        else if (event.key === "ArrowRight") view.x -= move;
+        else if (event.key === "ArrowUp") view.y += move;
+        else if (event.key === "ArrowDown") view.y -= move;
+        else if (event.key === "+" || event.key === "=") {
+          zoomFromCenter(1.16);
+          event.preventDefault();
+          return;
+        } else if (event.key === "-") {
+          zoomFromCenter(1 / 1.16);
+          event.preventDefault();
+          return;
+        } else if (event.key === "0") {
+          fitWholeSystem();
+          event.preventDefault();
+          return;
+        } else if (event.key === "Escape") {
+          closeInspector();
+          toggleOutline(false);
+          return;
+        } else {
+          return;
+        }
+        event.preventDefault();
+        applyView();
+      });
+
+      elements.outlineToggle.addEventListener("click", () =>
+        toggleOutline()
+      );
+      elements.outlineClose.addEventListener("click", () =>
+        toggleOutline(false)
+      );
+      elements.locateCurrent.addEventListener(
+        "click",
+        locateCurrentLearning
+      );
+      elements.themeToggle.addEventListener("click", cycleTheme);
+      elements.zoomOut.addEventListener("click", () =>
+        zoomFromCenter(1 / 1.16)
+      );
+      elements.zoomIn.addEventListener("click", () =>
+        zoomFromCenter(1.16)
+      );
+      elements.fitSystem.addEventListener("click", fitWholeSystem);
+      elements.collapseProof.addEventListener("click", () => {
+        const anchorStage = stageById.get(expandedStageId);
+        const anchor = anchorStage?.answer_id
+          ? captureNodeAnchor(anchorStage.answer_id)
+          : null;
+        expandedStageId = "";
+        expandedMapIds.clear();
+        renderSystem({ anchor, preserveView: true });
+      });
+      elements.inspectorClose.addEventListener("click", closeInspector);
+      window.addEventListener("resize", () => {
+        if (!currentLayout) return;
+        applyView();
+      });
+
+      setTheme("system");
+      renderOutline();
+      renderAccessibleOutline();
+      renderProgress();
+      renderSystem({ preserveView: true });
+      requestAnimationFrame(() => jumpToStage(stages[0].id));
+    })();
+  </script>
+</body>
+</html>
