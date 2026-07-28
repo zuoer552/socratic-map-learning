@@ -351,7 +351,7 @@ class RuntimeTests(unittest.TestCase):
             prepared["unit_packet"]["excerpts"][0]["id"],
             "criterion",
         )
-        self.assertEqual(prepared["unit_packet"]["version"], 2)
+        self.assertEqual(prepared["unit_packet"]["version"], 3)
         self.assertEqual(
             prepared["unit_packet"]["excerpts"][0]["required_premises"],
             ["任意改变的主张不能成为可靠知识。"],
@@ -392,6 +392,415 @@ class RuntimeTests(unittest.TestCase):
         self.assertIn("可靠知识必须排除任意改变", map_text)
         self.assertNotIn("判断标准排除任意性", map_text)
         self.assertIn('"current_phase":"verification"', map_text)
+
+    def test_active_move_must_close_before_target_change(self) -> None:
+        course = self.root / "move-closure"
+        self.initialize(course)
+        packet_path = course / "unit-packet.json"
+        hidden_answer = "隐藏答案：共同标准使答案能够被公共比较。"
+        packet_path.write_text(
+            json.dumps(
+                {
+                    "current_node_id": "node-question",
+                    "unit_title": "判断标准",
+                    "active_move": {
+                        "id": "move-public-standard",
+                        "node_id": "node-question",
+                        "target_id": "inference-question-criterion",
+                        "interaction_kind": "fill",
+                        "prompt": "只补全这一根连接：为什么需要共同标准？",
+                        "expected_answer": hidden_answer,
+                        "required_premises": [
+                            "没有标准时答案无法被共同比较。"
+                        ],
+                        "scope_boundary": "不能推出标准只有一种。",
+                    },
+                    "excerpts": [
+                        {
+                            "id": "criterion",
+                            "text": "可靠知识需要公共判断标准。",
+                            "connection": "标准使答案能够比较。",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        prepared = json.loads(
+            self.run_cli(
+                "prepare-unit",
+                str(course),
+                "--packet",
+                str(packet_path),
+                "--expected-revision",
+                "0",
+                "--expected-current",
+                "node-question",
+            ).stdout
+        )
+        self.assertEqual(prepared["active_move"]["status"], "open")
+        map_text = (course / "map.html").read_text(encoding="utf-8")
+        self.assertIn("为什么需要共同标准", map_text)
+        self.assertNotIn(hidden_answer, map_text)
+
+        self.run_cli(
+            "commit",
+            str(course),
+            "--expected-revision",
+            "0",
+            "--expected-current",
+            "node-question",
+            "--diagnosis",
+            "partial",
+            "--evidence-kind",
+            "none",
+            expected=2,
+        )
+        self.assertEqual(self.context(course)["receipt"]["revision"], 0)
+
+        repair_path = course / "repair-turn.json"
+        repair_path.write_text(
+            json.dumps(
+                {
+                    "resolution": {
+                        "move_id": "move-public-standard",
+                        "outcome": "partial",
+                        "learner_response": "因为大家要用同一个说法。",
+                        "evidence_kind": "own_words_reason",
+                        "accepted_parts": ["需要一个共同参照"],
+                        "missing_link": "共同参照如何使不同答案可比较与纠正",
+                    }
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        repaired = json.loads(
+            self.run_cli(
+                "commit",
+                str(course),
+                "--expected-revision",
+                "0",
+                "--expected-current",
+                "node-question",
+                "--diagnosis",
+                "partial",
+                "--evidence-kind",
+                "none",
+                "--turn",
+                str(repair_path),
+            ).stdout
+        )
+        self.assertEqual(repaired["receipt"]["revision"], 1)
+        self.assertEqual(repaired["active_move"]["status"], "repair")
+        self.assertEqual(len(repaired["active_move"]["attempts"]), 1)
+        self.assertEqual(
+            repaired["committed"]["active_move_id"],
+            "move-public-standard",
+        )
+
+        prepared_again = json.loads(
+            self.run_cli(
+                "prepare-unit",
+                str(course),
+                "--packet",
+                str(packet_path),
+                "--expected-revision",
+                "1",
+                "--expected-current",
+                "node-question",
+            ).stdout
+        )
+        self.assertEqual(prepared_again["active_move"]["status"], "repair")
+        self.assertEqual(len(prepared_again["active_move"]["attempts"]), 1)
+
+        invalid_turn = course / "invalid-next-turn.json"
+        invalid_turn.write_text(
+            json.dumps(
+                {
+                    "resolution": {
+                        "move_id": "move-public-standard",
+                        "outcome": "partial",
+                        "learner_response": "还是共同说法。",
+                        "evidence_kind": "none",
+                        "accepted_parts": [],
+                        "missing_link": "仍未说明可比较性",
+                    },
+                    "next_move": {
+                        "id": "move-too-early",
+                        "node_id": "node-question",
+                        "target_id": "inference-joint-boundary",
+                        "interaction_kind": "distinguish",
+                        "prompt": "这个结论的边界是什么？",
+                        "expected_answer": "不能推出唯一标准。",
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            "commit",
+            str(course),
+            "--expected-revision",
+            "1",
+            "--expected-current",
+            "node-question",
+            "--diagnosis",
+            "partial",
+            "--evidence-kind",
+            "none",
+            "--turn",
+            str(invalid_turn),
+            expected=2,
+        )
+        self.assertEqual(self.context(course)["receipt"]["revision"], 1)
+
+        resolved_statement = (
+            "共同标准使不同答案能够被公共比较、纠正和淘汰。"
+        )
+        next_hidden_answer = "隐藏答案：判断标准不能保证自己是唯一标准。"
+        resolved_path = course / "resolved-turn.json"
+        resolved_path.write_text(
+            json.dumps(
+                {
+                    "resolution": {
+                        "move_id": "move-public-standard",
+                        "outcome": "resolved",
+                        "learner_response": "有共同标准，答案才能比较和纠正。",
+                        "evidence_kind": "own_words_reason",
+                        "accepted_parts": ["答案能够比较和纠正"],
+                        "resolved_statement": resolved_statement,
+                    },
+                    "next_move": {
+                        "id": "move-boundary",
+                        "node_id": "node-question",
+                        "target_id": "inference-joint-boundary",
+                        "interaction_kind": "distinguish",
+                        "prompt": "现在只区分：共同标准能否保证唯一标准？",
+                        "expected_answer": next_hidden_answer,
+                        "required_premises": [
+                            "能够比较不等于已经证明唯一性。"
+                        ],
+                        "scope_boundary": "只判断这个推论是否成立。",
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        resolved = json.loads(
+            self.run_cli(
+                "commit",
+                str(course),
+                "--expected-revision",
+                "1",
+                "--expected-current",
+                "node-question",
+                "--diagnosis",
+                "partial",
+                "--evidence-kind",
+                "none",
+                "--inference-step",
+                "inference-question-criterion",
+                "--inference-level",
+                "understood",
+                "--turn",
+                str(resolved_path),
+            ).stdout
+        )
+        self.assertEqual(resolved["receipt"]["revision"], 2)
+        self.assertEqual(resolved["receipt"]["current_node_id"], "node-question")
+        self.assertEqual(
+            resolved["committed"]["active_move_id"],
+            "move-boundary",
+        )
+        self.assertEqual(
+            resolved["argument_inferences"][0]["mastery_level"],
+            "understood",
+        )
+        history = resolved["recent_resolutions"][-1]
+        self.assertEqual(history["resolved_statement"], resolved_statement)
+        self.assertEqual(history["expected_answer"], hidden_answer)
+        self.assertEqual(len(history["attempts"]), 2)
+        self.assertEqual(
+            history["accepted_parts"],
+            ["需要一个共同参照", "答案能够比较和纠正"],
+        )
+
+        map_text = (course / "map.html").read_text(encoding="utf-8")
+        self.assertIn(resolved_statement, map_text)
+        self.assertIn("共同标准能否保证唯一标准", map_text)
+        self.assertNotIn(hidden_answer, map_text)
+        self.assertNotIn(next_hidden_answer, map_text)
+        self.assertNotIn("因为大家要用同一个说法", map_text)
+        self.assertIn('"status":"open"', map_text)
+
+        boundary_resolution = "共同标准允许比较，但不能仅凭这一点证明标准唯一。"
+        boundary_turn = course / "boundary-turn.json"
+        boundary_turn.write_text(
+            json.dumps(
+                {
+                    "resolution": {
+                        "move_id": "move-boundary",
+                        "outcome": "resolved",
+                        "learner_response": "不能，能比较不代表只有这一个标准。",
+                        "evidence_kind": "correct_distinction",
+                        "accepted_parts": ["能够比较不等于已经证明唯一"],
+                        "resolved_statement": boundary_resolution,
+                    },
+                    "next_move": {
+                        "id": "move-next-node",
+                        "node_id": "node-criterion",
+                        "target_id": "inference-criterion-detail",
+                        "interaction_kind": "reconstruct",
+                        "prompt": "请重建共同标准怎样排除任意性。",
+                        "expected_answer": "公共比较使任意答案能够被纠正或淘汰。",
+                    },
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        advanced = json.loads(
+            self.run_cli(
+                "commit",
+                str(course),
+                "--expected-revision",
+                "2",
+                "--expected-current",
+                "node-question",
+                "--diagnosis",
+                "mastered",
+                "--evidence-kind",
+                "correct_distinction",
+                "--inference-step",
+                "inference-joint-boundary",
+                "--inference-level",
+                "reconstructable",
+                "--turn",
+                str(boundary_turn),
+            ).stdout
+        )
+        self.assertEqual(
+            advanced["receipt"]["current_node_id"],
+            "node-criterion",
+        )
+        self.assertEqual(advanced["active_move"]["node_id"], "node-criterion")
+        self.assertEqual(
+            advanced["recent_resolutions"][-1]["resolved_statement"],
+            boundary_resolution,
+        )
+        validation = json.loads(
+            self.run_cli("validate", str(course), "--deep").stdout
+        )
+        self.assertTrue(validation["ok"])
+
+    def test_prompt_defect_is_not_learner_evidence_or_phase_progress(
+        self,
+    ) -> None:
+        course = self.root / "prompt-defect"
+        self.initialize(course)
+        packet_path = course / "unit-packet.json"
+        packet_path.write_text(
+            json.dumps(
+                {
+                    "current_node_id": "node-question",
+                    "unit_title": "判断标准",
+                    "active_move": {
+                        "id": "move-defective",
+                        "node_id": "node-question",
+                        "target_id": "inference-question-criterion",
+                        "interaction_kind": "reconstruct",
+                        "prompt": "这个关系为什么成立？",
+                        "expected_answer": "题目缺少明确指代。",
+                    },
+                    "excerpts": [
+                        {
+                            "id": "criterion",
+                            "text": "可靠知识需要公共判断标准。",
+                            "connection": "标准使答案能够比较。",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            "prepare-unit",
+            str(course),
+            "--packet",
+            str(packet_path),
+            "--expected-revision",
+            "0",
+            "--expected-current",
+            "node-question",
+        )
+        turn_path = course / "prompt-defect-turn.json"
+        turn_path.write_text(
+            json.dumps(
+                {
+                    "resolution": {
+                        "move_id": "move-defective",
+                        "outcome": "prompt_defect",
+                        "learner_response": "不知道这个关系指什么。",
+                        "evidence_kind": "none",
+                        "accepted_parts": [],
+                        "missing_link": "题目中的“这个关系”没有明确指代",
+                    }
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self.run_cli(
+            "commit",
+            str(course),
+            "--expected-revision",
+            "0",
+            "--expected-current",
+            "node-question",
+            "--diagnosis",
+            "unknown",
+            "--evidence-kind",
+            "none",
+            "--learning-phase",
+            "verification",
+            "--turn",
+            str(turn_path),
+            expected=2,
+        )
+        committed = json.loads(
+            self.run_cli(
+                "commit",
+                str(course),
+                "--expected-revision",
+                "0",
+                "--expected-current",
+                "node-question",
+                "--diagnosis",
+                "unknown",
+                "--evidence-kind",
+                "none",
+                "--turn",
+                str(turn_path),
+            ).stdout
+        )
+        self.assertFalse(committed["committed"]["node_evidence_recorded"])
+        self.assertEqual(
+            committed["learning_cycle"]["current_phase"],
+            "understanding",
+        )
+        self.assertEqual(committed["active_move"]["status"], "repair")
 
     def test_history_mode_changes_current_view_language(self) -> None:
         course = self.root / "history-mode"
@@ -754,6 +1163,30 @@ class RuntimeTests(unittest.TestCase):
         )
         self.assertEqual(invalid.returncode, 1)
         self.assertIn("source-structure sidebar", invalid.stderr)
+
+        leaked = map_path.read_text(encoding="utf-8").replace(
+            '"active_move":{}',
+            (
+                '"active_move":{"id":"move-leaked",'
+                '"node_id":"node-question",'
+                '"target_id":"node-question",'
+                '"interaction_kind":"judge",'
+                '"prompt":"公开问题",'
+                '"status":"open",'
+                '"expected_answer":"不应公开"}'
+            ),
+            1,
+        )
+        leaked_path = course / "leaked.html"
+        leaked_path.write_text(leaked, encoding="utf-8")
+        leaked_result = subprocess.run(
+            ["python3", str(VALIDATOR), str(leaked_path)],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(leaked_result.returncode, 1)
+        self.assertIn("leaks internal answer data", leaked_result.stderr)
 
     def test_deep_validation_detects_source_change(self) -> None:
         course = self.root / "source-check"

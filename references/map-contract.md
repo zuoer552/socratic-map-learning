@@ -45,8 +45,10 @@ A question page contains:
 - source-structure breadcrumbs;
 - question, status, primary source unit, and related source units;
 - the current local learning-cycle phase when this is the active question;
-- only this question's local relation map, immediately after the question
-  header;
+- the most recent normalized resolution and the one active or repair move,
+  immediately after the question header;
+- only this question's local relation map, immediately after that compact
+  learning state;
 - one compact conclusion plus progressively disclosed atomic relations, full
   source context, faithful translation, explanation, critical boundary,
   transfer record, and mastery details;
@@ -153,15 +155,27 @@ The active question displays one of:
 learner-facing mode-neutral labels. The phase is orientation, not proof and not
 a progress percentage.
 
+The active question also displays exactly one current learner move. An open
+move shows its prompt; a repair move additionally shows the single missing
+connection. Highlight the node or inference named by its target when it is
+visible. The last normalized resolution is shown near the top so a learner
+never has to infer whether the previous question was answered.
+
+Never serialize an open move's expected answer, required premises, learner
+response, or attempt history into the public snapshot. Resolved history may
+show the normalized statement and accepted parts, but not hidden teacher
+rubrics or raw learner responses.
+
 Prepared source material remains progressively available after the course moves
 on. When chat used a source fragment, the expanded source area preserves the
 complete sentence or necessary local context, the faithful translation when
 needed, and a clear boundary between source wording and teacher explanation.
 
 Primary reasoning content is never hidden behind a redundant opening action.
-Entering a question page presents its local map directly after a compact
-question header. Long source-location notes, broader summaries, and route
-context remain available without delaying the current reasoning task.
+Entering a question page presents closure state, the active move, and its local
+map directly after a compact question header. Long source-location notes,
+broader summaries, and route context remain available without delaying the
+current reasoning task.
 
 Future questions show their wording, source position, and problem-chain
 context, but no answer or proof. If learner state says a question was completed

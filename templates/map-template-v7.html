@@ -907,6 +907,13 @@
       border-color: var(--amber);
     }
 
+    .inference-card.active-target,
+    .proposition.active-target {
+      outline: 3px solid color-mix(in srgb, var(--accent) 24%, transparent);
+      border-color: var(--accent-strong);
+      box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+
     .inference-card.mastery-reconstructable,
     .inference-card.mastery-transferable,
     .inference-card.mastery-retained {
@@ -944,6 +951,65 @@
       border-radius: 999px;
       font-size: 11px;
       font-weight: 800;
+    }
+
+    .move-state {
+      display: grid;
+      gap: 10px;
+      margin: 24px 0 0;
+      padding: 18px 20px;
+      color: var(--default-fg);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+    }
+
+    .move-state.resolved {
+      background: color-mix(in srgb, var(--conclusion-bg) 74%, var(--surface));
+      border-color: var(--conclusion-border);
+    }
+
+    .move-state.repair {
+      background: color-mix(in srgb, var(--amber-soft) 58%, var(--surface));
+      border-color: var(--amber);
+    }
+
+    .move-state .move-kicker {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.09em;
+    }
+
+    .move-state strong {
+      font-family: ui-serif, "Songti SC", "STSong", Georgia, serif;
+      font-size: clamp(18px, 2.4vw, 22px);
+      line-height: 1.55;
+    }
+
+    .move-state p {
+      max-width: 72ch;
+      margin: 0;
+    }
+
+    .move-state .missing-link {
+      padding-top: 10px;
+      border-top: 1px solid currentColor;
+      font-size: 14px;
+    }
+
+    .resolved-move-list {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .resolved-move-list li + li {
+      padding-top: 12px;
+      border-top: 1px solid var(--conclusion-border);
     }
 
     .source-reading {
@@ -1205,6 +1271,8 @@
     const inferences = atlas.inferences;
     const nodes = snapshot.nodes;
     const learningCycle = snapshot.learning_cycle || {};
+    const activeMove = learningCycle.active_move || {};
+    const resolvedMoves = learningCycle.resolved_moves || [];
     const unitPackets = snapshot.unit_packets || {};
     const transitions = spine.transitions;
     const units = [...sourceStructure.units].sort(
@@ -1675,7 +1743,10 @@
     function propositionMarkup(nodeId, role) {
       const node = nodeById.get(nodeId);
       if (!node) return "";
-      const classes = nodeClass(node, role);
+      const activeTarget = activeMove.target_id === nodeId;
+      const classes = `${nodeClass(node, role)} ${
+        activeTarget ? "active-target" : ""
+      }`;
       return `
         <details class="proposition ${classes}">
           <summary>
@@ -1701,9 +1772,11 @@
     function inferenceMarkup(inference) {
       const mastery = inference.mastery_level || "unassessed";
       const latest = inference.id === learningCycle.latest_inference_step_id;
+      const activeTarget = inference.id === activeMove.target_id;
       return `
         <div class="inference-card ${escapeHtml(inference.kind)}
-          mastery-${escapeHtml(mastery)} ${latest ? "latest" : ""}">
+          mastery-${escapeHtml(mastery)} ${latest ? "latest" : ""}
+          ${activeTarget ? "active-target" : ""}">
           <strong>${escapeHtml(
             inference.kind === "objects"
               ? modeCopy.objects
@@ -1720,6 +1793,55 @@
             )}
           </span>
         </div>
+      `;
+    }
+
+    function moveBelongsToStage(move, stage) {
+      if (!move?.node_id) return false;
+      return stageForNode(move.node_id)?.id === stage.id;
+    }
+
+    function resolvedMovesMarkup(stage) {
+      const matches = resolvedMoves
+        .filter((move) => moveBelongsToStage(move, stage))
+        .slice(-3)
+        .reverse();
+      if (!matches.length) return "";
+      return `
+        <section class="move-state resolved" aria-label="已经闭环的认识">
+          <p class="move-kicker">刚刚确认的连接</p>
+          <ul class="resolved-move-list">
+            ${matches.map((move) => `
+              <li>
+                <strong>${escapeHtml(move.resolved_statement)}</strong>
+                ${move.accepted_parts?.length ? `
+                  <p>你已经独立说出的部分：${escapeHtml(
+                    move.accepted_parts.join("；")
+                  )}</p>
+                ` : ""}
+              </li>
+            `).join("")}
+          </ul>
+        </section>
+      `;
+    }
+
+    function activeMoveMarkup(stage) {
+      if (!moveBelongsToStage(activeMove, stage)) return "";
+      const repairing = activeMove.status === "repair";
+      return `
+        <section class="move-state ${repairing ? "repair" : "open"}"
+          aria-label="${repairing ? "正在补齐的连接" : "当前学习动作"}">
+          <p class="move-kicker">
+            ${repairing ? "这一处还没有闭环" : "当前只推进这一小步"}
+          </p>
+          <strong>${escapeHtml(activeMove.prompt)}</strong>
+          ${repairing && activeMove.missing_link ? `
+            <p class="missing-link">
+              现在只补：${escapeHtml(activeMove.missing_link)}
+            </p>
+          ` : ""}
+        </section>
       `;
     }
 
@@ -1880,6 +2002,9 @@
               ${relatedUnitChips(stage)}
             </div>
           </header>
+
+          ${resolvedMovesMarkup(stage)}
+          ${activeMoveMarkup(stage)}
 
           <section class="proof-section" aria-label="局部关系">
             ${renderProofFor(stage)}

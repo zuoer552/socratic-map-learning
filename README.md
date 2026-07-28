@@ -1,4 +1,4 @@
-# Socratic Map Learning 7.4.0
+# Socratic Map Learning 7.5.0
 
 一个通用 Codex Skill：以一次一问的苏格拉底对话精读复杂作品，同时维护
 原书结构、全书问题链、单问题局部关系，以及彼此独立的阅读与掌握进度。
@@ -32,7 +32,19 @@
 但教学语言按当前体裁转换；不会把历史因果、实用条件或文学解释伪装成
 演绎证明。混合型作品按当前单元选择体裁语法，并明确切换。
 
-## v7.4 教学循环
+## v7.5 问题闭环与教学循环
+
+- 学习者回答后，教师必须先给出这一题的规范化完整结论，或明确进入同一
+  连接的修补；不会不公布答案就跳到下一个知识点；
+- 规范化结论要求关系等价，不要求学习者逐字匹配唯一标准答案；
+- 半懂时保留已经独立说出的部分，只补一根缺失连接；当前节点、目标、
+  五阶段位置和掌握层级全部冻结；
+- “修补中”是当前五阶段内部的临时状态，不另造第六阶段，也不计作进度；
+- 二至五步只是单轮呈现上限；原子性以学习者能否独立复原为准；
+- 运行时保存当前问题、历次尝试、已理解部分、缺失连接与规范化结论，
+  因而换轮后也不能悄悄遗失上一题；
+- 网页顶部同时显示最近闭环的结论和当前唯一学习动作，并高亮其对应关系；
+- 开放问题的预期答案、评分前提、原始回答和尝试记录永远不写入公开网页。
 
 - 新单元只准备一次最小原文资料包；
 - 同一单元的日常回合复用准确原文，不重复扫描 PDF；
@@ -74,10 +86,7 @@ socratic-map-learning/
 │   └── validate_learning_map.py
 ├── templates/
 │   ├── course-blueprint.example.json
-│   ├── map-template-v5.html
-│   ├── map-template-v6.html
 │   ├── map-template-v7.html
-│   ├── progress-template-v1.html
 │   ├── progress-template-v2.html
 │   └── structure-overlay.example.json
 └── tests/
@@ -88,8 +97,9 @@ socratic-map-learning/
     └── test_skill_response_contract.py
 ```
 
-旧模板只用于迁移；当前渲染器使用
-`map-template-v7.html` 与 `progress-template-v2.html`。
+当前渲染器只有一套正式模板：
+`map-template-v7.html` 与 `progress-template-v2.html`。旧版本仍可通过
+`import-html` 迁移，不依赖旧渲染模板。
 
 ## 安装
 
@@ -157,6 +167,7 @@ python3 scripts/sml.py commit <course-dir> \
   --expected-current <node-id> \
   --diagnosis mastered \
   --evidence-kind own_words_reason \
+  --turn <turn-update.json> \
   --learning-phase synthesis \
   --inference-step <inference-id> \
   --inference-level reconstructable
@@ -170,6 +181,46 @@ python3 scripts/sml.py render <course-dir>
 # 验收
 python3 scripts/sml.py audit <course-dir>
 python3 scripts/sml.py validate <course-dir> --deep
+```
+
+`turn-update.json` 是每轮闭环的事务输入。完整回答并开启下一步：
+
+```json
+{
+  "resolution": {
+    "move_id": "move-current-link",
+    "outcome": "resolved",
+    "learner_response": "学习者这一轮的原话",
+    "evidence_kind": "own_words_reason",
+    "accepted_parts": ["学习者已经独立建立的部分"],
+    "resolved_statement": "教师给出的规范化完整结论"
+  },
+  "next_move": {
+    "id": "move-next-link",
+    "node_id": "node-next",
+    "target_id": "inference-next-link",
+    "interaction_kind": "distinguish",
+    "prompt": "下一次只完成的一项动作",
+    "expected_answer": "供教师内部判断，不进入公开网页",
+    "required_premises": ["已经提供的前提"],
+    "scope_boundary": "这一步不能推出什么"
+  }
+}
+```
+
+半懂、误解或答不上来时不提供 `next_move`，而是记录修补：
+
+```json
+{
+  "resolution": {
+    "move_id": "move-current-link",
+    "outcome": "partial",
+    "learner_response": "学习者这一轮的原话",
+    "evidence_kind": "own_words_reason",
+    "accepted_parts": ["已经说对的部分"],
+    "missing_link": "仍需补齐的唯一连接"
+  }
+}
 ```
 
 ## 核心数据
@@ -196,6 +247,8 @@ python3 scripts/sml.py validate <course-dir> --deep
 运行时还保存：
 
 - `learning_phases`：每个当前或已学问题的五阶段位置；
+- `active_move`：当前唯一学习动作及其开放或修补状态；
+- `move_history`：历次尝试、已理解部分与规范化闭环结论；
 - `unit_packets`：按问题归档的最短教学片段、完整上下文和直译；
 - `inference_mastery`：当下理解、能够重建、能够迁移与稳定掌握；
 - `latest_inference_step_id`：地图中最近一次验证的关系。
@@ -210,9 +263,9 @@ node tests/map_contrast_audit.js <map.html>
 python3 scripts/validate_learning_map.py <map.html>
 ```
 
-测试覆盖来源层级、唯一问题页、问题链连续性、未来答案隐藏、局部证明
-可达性、从下向上推理、渐进展开、无自由画布、进度分层、明暗主题
-WCAG 对比度、快速回合与学习回复契约。
+测试覆盖来源层级、唯一问题页、问题链连续性、上一题闭环、半懂修补、
+开放答案不泄露、局部证明可达性、从下向上推理、渐进展开、无自由画布、
+进度分层、明暗主题 WCAG 对比度、快速回合与学习回复契约。
 
 ## 适用范围
 

@@ -64,6 +64,19 @@ INTERACTION_KINDS = {
     "interpret",
     "transfer",
 }
+MOVE_STATUSES = {"open", "repair"}
+MOVE_OUTCOMES = {
+    "resolved",
+    "partial",
+    "misconception",
+    "unknown",
+    "prompt_defect",
+    "explanation_defect",
+}
+NON_EVIDENCE_MOVE_OUTCOMES = {
+    "prompt_defect",
+    "explanation_defect",
+}
 RELATION_TYPES = {
     "root",
     "supports",
@@ -1643,6 +1656,12 @@ def ensure_graph_schema(connection: sqlite3.Connection, path: Path) -> None:
         if get_meta_optional(connection, "latest_inference_step_id") is None:
             set_meta(connection, "latest_inference_step_id", "")
             metadata_changed = True
+        if get_meta_optional(connection, "active_move") is None:
+            set_meta(connection, "active_move", {})
+            metadata_changed = True
+        if get_meta_optional(connection, "move_history") is None:
+            set_meta(connection, "move_history", [])
+            metadata_changed = True
         if metadata_changed:
             connection.commit()
         return
@@ -1800,6 +1819,10 @@ def ensure_graph_schema(connection: sqlite3.Connection, path: Path) -> None:
             )
         if get_meta_optional(connection, "latest_inference_step_id") is None:
             set_meta(connection, "latest_inference_step_id", "")
+        if get_meta_optional(connection, "active_move") is None:
+            set_meta(connection, "active_move", {})
+        if get_meta_optional(connection, "move_history") is None:
+            set_meta(connection, "move_history", [])
         set_meta(connection, "schema_version", SCHEMA_VERSION)
         set_meta(connection, "graph_schema_version", GRAPH_SCHEMA_VERSION)
         connection.commit()
@@ -2035,6 +2058,8 @@ def initialize_course(
             "unit_packets": {},
             "learning_phases": {current: "understanding"},
             "latest_inference_step_id": "",
+            "active_move": {},
+            "move_history": [],
         }
         for key, value in meta_values.items():
             set_meta(connection, key, value)
@@ -3300,6 +3325,44 @@ def graph_snapshot(connection: sqlite3.Connection) -> dict[str, Any]:
     learning_phases = get_meta_optional(connection, "learning_phases", {})
     if not isinstance(learning_phases, dict):
         learning_phases = {}
+    active_move = get_meta_optional(connection, "active_move", {})
+    if not isinstance(active_move, dict):
+        active_move = {}
+    public_active_move = {
+        key: active_move[key]
+        for key in (
+            "id",
+            "node_id",
+            "target_id",
+            "interaction_kind",
+            "prompt",
+            "status",
+            "missing_link",
+        )
+        if active_move.get(key)
+    }
+    move_history = get_meta_optional(connection, "move_history", [])
+    if not isinstance(move_history, list):
+        move_history = []
+    public_resolutions = [
+        {
+            key: item[key]
+            for key in (
+                "move_id",
+                "node_id",
+                "target_id",
+                "interaction_kind",
+                "resolved_statement",
+                "accepted_parts",
+                "closed_at",
+            )
+            if item.get(key)
+        }
+        for item in move_history
+        if isinstance(item, dict)
+        and item.get("status") == "resolved"
+        and item.get("resolved_statement")
+    ][-12:]
     unit_packets = get_meta_optional(connection, "unit_packets", {})
     if not isinstance(unit_packets, dict):
         unit_packets = {}
@@ -3356,6 +3419,8 @@ def graph_snapshot(connection: sqlite3.Connection) -> dict[str, Any]:
                     "",
                 )
             ),
+            "active_move": public_active_move,
+            "resolved_moves": public_resolutions,
         },
         "unit_packets": map_unit_packets,
         "progress": {
@@ -3868,6 +3933,246 @@ def compact_node(
     }
 
 
+def normalize_learning_move(
+    raw: dict[str, Any],
+    *,
+    current_node_id: str,
+    default_status: str = "open",
+) -> dict[str, Any]:
+    """Validate one actual learner move without exposing its answer to the map."""
+
+    if not isinstance(raw, dict):
+        raise SkillError("Learning move must be a JSON object")
+    move_id = str(raw.get("id", "")).strip()
+    node_id = str(raw.get("node_id", current_node_id)).strip()
+    target_id = str(raw.get("target_id", "")).strip()
+    interaction_kind = str(raw.get("interaction_kind", "")).strip()
+    prompt = str(raw.get("prompt", "")).strip()
+    expected_answer = str(raw.get("expected_answer", "")).strip()
+    status = str(raw.get("status", default_status)).strip()
+    if not move_id or not ID_PATTERN.fullmatch(move_id):
+        raise SkillError(
+            "Learning move id must use lowercase letters, digits, dots, "
+            "underscores, or hyphens"
+        )
+    if node_id != current_node_id:
+        raise SkillError(
+            "Learning move node_id does not match the active node: "
+            f"{node_id!r} != {current_node_id!r}"
+        )
+    if not target_id:
+        raise SkillError("Learning move target_id is required")
+    if interaction_kind not in INTERACTION_KINDS:
+        raise SkillError(
+            f"Learning move has invalid interaction_kind {interaction_kind!r}"
+        )
+    if not prompt:
+        raise SkillError("Learning move prompt is required")
+    if not expected_answer:
+        raise SkillError("Learning move expected_answer is required")
+    if status != default_status or status not in MOVE_STATUSES:
+        raise SkillError(
+            "A newly selected learning move must start with status "
+            f"{default_status!r}"
+        )
+
+    required_premises = raw.get("required_premises", [])
+    if required_premises is None:
+        required_premises = []
+    if not isinstance(required_premises, list) or not all(
+        isinstance(value, str) and value.strip()
+        for value in required_premises
+    ):
+        raise SkillError(
+            "Learning move required_premises must be a list of "
+            "non-empty strings"
+        )
+
+    if raw.get("attempts"):
+        raise SkillError(
+            "A newly selected learning move cannot import prior attempts"
+        )
+
+    return {
+        "id": move_id,
+        "node_id": node_id,
+        "target_id": target_id,
+        "interaction_kind": interaction_kind,
+        "prompt": prompt,
+        "expected_answer": expected_answer,
+        "required_premises": [
+            value.strip() for value in required_premises
+        ],
+        "scope_boundary": str(raw.get("scope_boundary", "")).strip(),
+        "status": status,
+        "opened_at": str(raw.get("opened_at", "")).strip() or utc_now(),
+        "attempts": [],
+    }
+
+
+def learning_move_target_exists(
+    connection: sqlite3.Connection,
+    target_id: str,
+) -> bool:
+    if connection.execute(
+        "SELECT 1 FROM nodes WHERE id = ?",
+        (target_id,),
+    ).fetchone():
+        return True
+    if connection.execute(
+        "SELECT 1 FROM semantic_edges WHERE id = ?",
+        (target_id,),
+    ).fetchone():
+        return True
+    atlas = get_meta_optional(connection, "argument_atlas", {})
+    if not isinstance(atlas, dict):
+        return False
+    return any(
+        isinstance(item, dict) and item.get("id") == target_id
+        for item in atlas.get("inferences", [])
+    )
+
+
+def require_learning_move_target(
+    connection: sqlite3.Connection,
+    move: dict[str, Any],
+) -> None:
+    target_id = str(move.get("target_id", ""))
+    if not learning_move_target_exists(connection, target_id):
+        raise SkillError(
+            "Learning move target_id must name a node, semantic edge, "
+            f"or inference step: {target_id!r}"
+        )
+    node_id = str(move.get("node_id", ""))
+    if target_id == node_id:
+        return
+    edge = connection.execute(
+        """
+        SELECT from_node_id, to_node_id
+        FROM semantic_edges
+        WHERE id = ?
+        """,
+        (target_id,),
+    ).fetchone()
+    if edge is not None and node_id in {
+        str(edge["from_node_id"]),
+        str(edge["to_node_id"]),
+    }:
+        return
+    atlas = get_meta_optional(connection, "argument_atlas", {})
+    if isinstance(atlas, dict):
+        inference = next(
+            (
+                item
+                for item in atlas.get("inferences", [])
+                if isinstance(item, dict) and item.get("id") == target_id
+            ),
+            None,
+        )
+        if inference is not None and (
+            node_id in set(map(str, inference.get("premise_ids", [])))
+            or str(inference.get("conclusion_id", "")) == node_id
+        ):
+            return
+    raise SkillError(
+        "Learning move target_id must belong to or touch its active node: "
+        f"{target_id!r} vs {node_id!r}"
+    )
+
+
+def normalize_turn_update(raw: dict[str, Any]) -> dict[str, Any]:
+    """Validate the closure or repair of one move plus an optional next move."""
+
+    if not isinstance(raw, dict):
+        raise SkillError("Turn update must be a JSON object")
+    resolution = raw.get("resolution")
+    next_move = raw.get("next_move")
+    if resolution is None:
+        raise SkillError(
+            "A commit turn update must resolve or repair the active move; "
+            "open the first move through prepare-unit"
+        )
+
+    normalized_resolution: dict[str, Any] | None = None
+    if resolution is not None:
+        if not isinstance(resolution, dict):
+            raise SkillError("Turn resolution must be a JSON object")
+        move_id = str(resolution.get("move_id", "")).strip()
+        outcome = str(resolution.get("outcome", "")).strip()
+        learner_response = str(
+            resolution.get("learner_response", "")
+        ).strip()
+        evidence_kind = str(
+            resolution.get("evidence_kind", "none")
+        ).strip()
+        resolved_statement = str(
+            resolution.get("resolved_statement", "")
+        ).strip()
+        missing_link = str(resolution.get("missing_link", "")).strip()
+        if not move_id:
+            raise SkillError("Turn resolution move_id is required")
+        if outcome not in MOVE_OUTCOMES:
+            raise SkillError(f"Turn resolution has invalid outcome {outcome!r}")
+        if evidence_kind not in EVIDENCE_KINDS:
+            raise SkillError(
+                f"Turn resolution has invalid evidence_kind {evidence_kind!r}"
+            )
+        if outcome == "resolved":
+            if not resolved_statement:
+                raise SkillError(
+                    "A resolved move requires one complete resolved_statement"
+                )
+            if missing_link:
+                raise SkillError(
+                    "A resolved move cannot retain a missing_link"
+                )
+        elif next_move is not None:
+            raise SkillError(
+                "An unresolved or defective move cannot open a next move"
+            )
+        elif not missing_link:
+            raise SkillError(
+                "An unresolved or defective move must name the missing_link "
+                "or defect being repaired"
+            )
+        if (
+            outcome in NON_EVIDENCE_MOVE_OUTCOMES
+            and evidence_kind != "none"
+        ):
+            raise SkillError(
+                f"{outcome} cannot be recorded as learner mastery evidence"
+            )
+        accepted_parts = resolution.get("accepted_parts", [])
+        if accepted_parts is None:
+            accepted_parts = []
+        if not isinstance(accepted_parts, list) or not all(
+            isinstance(value, str) and value.strip()
+            for value in accepted_parts
+        ):
+            raise SkillError(
+                "Turn resolution accepted_parts must be a list of "
+                "non-empty strings"
+            )
+        normalized_resolution = {
+            "move_id": move_id,
+            "outcome": outcome,
+            "learner_response": learner_response,
+            "evidence_kind": evidence_kind,
+            "accepted_parts": [
+                value.strip() for value in accepted_parts
+            ],
+            "missing_link": missing_link,
+            "resolved_statement": resolved_statement,
+        }
+
+    if next_move is not None and not isinstance(next_move, dict):
+        raise SkillError("Turn next_move must be a JSON object")
+    return {
+        "resolution": normalized_resolution,
+        "next_move": next_move,
+    }
+
+
 def normalize_unit_packet(
     raw: dict[str, Any],
     *,
@@ -3946,8 +4251,8 @@ def normalize_unit_packet(
             ]
         normalized_excerpts.append(normalized_item)
 
-    return {
-        "version": 2,
+    normalized_packet = {
+        "version": 3,
         "status": "ready",
         "current_node_id": current_node_id,
         "unit_title": str(raw.get("unit_title", "")).strip(),
@@ -3955,6 +4260,13 @@ def normalize_unit_packet(
         "prepared_at": utc_now(),
         "excerpts": normalized_excerpts,
     }
+    active_move = raw.get("active_move")
+    if active_move is not None:
+        normalized_packet["active_move"] = normalize_learning_move(
+            active_move,
+            current_node_id=current_node_id,
+        )
+    return normalized_packet
 
 
 def active_unit_packet_payload(
@@ -4025,6 +4337,12 @@ def context_payload(
         if current_id
         else "synthesis"
     )
+    active_move = get_meta_optional(connection, "active_move", {})
+    if not isinstance(active_move, dict):
+        active_move = {}
+    move_history = get_meta_optional(connection, "move_history", [])
+    if not isinstance(move_history, list):
+        move_history = []
 
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -4058,6 +4376,8 @@ def context_payload(
                 )
             ),
         },
+        "active_move": active_move,
+        "recent_resolutions": move_history[-5:],
         "current": None,
         "parent": None,
         "prerequisites": [],
@@ -4205,6 +4525,8 @@ def prepare_unit(
 
     raw = load_json(packet_path)
     connection = open_database(course_dir)
+    temporary_map: Path | None = None
+    temporary_progress: Path | None = None
     try:
         connection.execute("BEGIN IMMEDIATE")
         revision = int(get_meta(connection, "revision"))
@@ -4227,6 +4549,39 @@ def prepare_unit(
             current_node_id=current_id,
             source_sha256=str(course_source.get("sha256", "")),
         )
+        prepared_move = normalized.get("active_move")
+        existing_move = get_meta_optional(connection, "active_move", {})
+        if prepared_move:
+            require_learning_move_target(connection, prepared_move)
+            move_history = get_meta_optional(connection, "move_history", [])
+            if not isinstance(move_history, list):
+                move_history = []
+            if any(
+                isinstance(item, dict)
+                and item.get("move_id") == prepared_move.get("id")
+                for item in move_history
+            ):
+                raise SkillError(
+                    "Cannot reopen a resolved learner move from an old "
+                    "unit packet"
+                )
+            if (
+                isinstance(existing_move, dict)
+                and existing_move.get("status") in {"open", "repair"}
+                and existing_move.get("id") != prepared_move.get("id")
+            ):
+                raise SkillError(
+                    "Cannot replace an unresolved active move while "
+                    "preparing a unit"
+                )
+            if (
+                isinstance(existing_move, dict)
+                and existing_move.get("status") in {"open", "repair"}
+                and existing_move.get("id") == prepared_move.get("id")
+            ):
+                prepared_move = existing_move
+                normalized["active_move"] = existing_move
+            set_meta(connection, "active_move", prepared_move)
         set_meta(connection, "unit_packet", normalized)
         packets = get_meta_optional(connection, "unit_packets", {})
         if not isinstance(packets, dict):
@@ -4238,7 +4593,21 @@ def prepare_unit(
             phases = {}
         phases.setdefault(current_id, "understanding")
         set_meta(connection, "learning_phases", phases)
+        (
+            map_path,
+            temporary_map,
+            progress_path,
+            temporary_progress,
+        ) = render_bundle_to_temporary(connection)
         connection.commit()
+        install_render_bundle(
+            map_path,
+            temporary_map,
+            progress_path,
+            temporary_progress,
+        )
+        temporary_map = None
+        temporary_progress = None
         result = context_payload(connection)
         result["prepared_unit"] = {
             "current_node_id": current_id,
@@ -4250,6 +4619,10 @@ def prepare_unit(
         connection.rollback()
         raise
     finally:
+        if temporary_map is not None:
+            temporary_map.unlink(missing_ok=True)
+        if temporary_progress is not None:
+            temporary_progress.unlink(missing_ok=True)
         connection.close()
 
 
@@ -4292,7 +4665,23 @@ def commit_turn(
     relation_level: str | None = None,
     inference_step_id: str | None = None,
     inference_level: str | None = None,
+    turn_path: Path | None = None,
 ) -> dict[str, Any]:
+    turn_update = (
+        normalize_turn_update(load_json(turn_path))
+        if turn_path is not None
+        else None
+    )
+    move_resolution = (
+        turn_update.get("resolution")
+        if turn_update is not None
+        else None
+    )
+    resolved_move_evidence = bool(
+        move_resolution
+        and move_resolution.get("outcome") == "resolved"
+        and move_resolution.get("evidence_kind") in MASTERY_EVIDENCE
+    )
     if diagnosis not in DIAGNOSES:
         raise SkillError(f"Invalid diagnosis: {diagnosis}")
     if evidence_kind not in EVIDENCE_KINDS:
@@ -4314,7 +4703,11 @@ def commit_turn(
     }:
         raise SkillError(f"Invalid relation mastery level: {relation_level}")
     if relation_edge_id and diagnosis != "mastered":
-        raise SkillError("Relation mastery evidence requires a mastered decision")
+        if not resolved_move_evidence or relation_level != "understood":
+            raise SkillError(
+                "A non-mastered node may record only understood relation "
+                "evidence from a resolved learner move"
+            )
     if bool(inference_step_id) != bool(inference_level):
         raise SkillError(
             "--inference-step and --inference-level must be supplied together"
@@ -4328,7 +4721,11 @@ def commit_turn(
     }:
         raise SkillError(f"Invalid inference mastery level: {inference_level}")
     if inference_step_id and diagnosis != "mastered":
-        raise SkillError("Inference mastery evidence requires a mastered decision")
+        if not resolved_move_evidence or inference_level != "understood":
+            raise SkillError(
+                "A non-mastered node may record only understood inference "
+                "evidence from a resolved learner move"
+            )
 
     connection = open_database(course_dir)
     temporary_map: Path | None = None
@@ -4357,6 +4754,56 @@ def commit_turn(
         ).fetchone()
         if current is None:
             raise SkillError(f"Current node not found: {current_id}")
+        active_move = get_meta_optional(connection, "active_move", {})
+        if not isinstance(active_move, dict):
+            raise SkillError("active_move must be an object")
+        if active_move and move_resolution is None:
+            raise SkillError(
+                "The active learner move must be resolved or repaired before "
+                "another commit"
+            )
+        if move_resolution is not None:
+            if not active_move:
+                raise SkillError(
+                    "Turn resolution cannot target a missing active move"
+                )
+            if move_resolution["move_id"] != active_move.get("id"):
+                raise SkillError(
+                    "Turn resolution move_id does not match the active move"
+                )
+        move_outcome = (
+            str(move_resolution.get("outcome"))
+            if move_resolution is not None
+            else ""
+        )
+        if move_outcome and move_outcome != "resolved":
+            if diagnosis == "mastered" or next_node:
+                raise SkillError(
+                    "An unresolved learner move cannot master or advance "
+                    "the current node"
+                )
+            if relation_edge_id or inference_step_id:
+                raise SkillError(
+                    "An unresolved learner move cannot raise relation mastery"
+                )
+            phases_before = get_meta_optional(
+                connection,
+                "learning_phases",
+                {},
+            )
+            current_phase_before = (
+                phases_before.get(current_id, "understanding")
+                if isinstance(phases_before, dict)
+                else "understanding"
+            )
+            if (
+                learning_phase
+                and learning_phase != current_phase_before
+            ):
+                raise SkillError(
+                    "An unresolved learner move cannot change the "
+                    "learning-cycle phase"
+                )
 
         relation_row: sqlite3.Row | None = None
         if relation_edge_id:
@@ -4382,6 +4829,10 @@ def commit_turn(
                     "Relation evidence must target an edge touching the "
                     "current learning node"
                 )
+            if active_move and active_move.get("target_id") != relation_edge_id:
+                raise SkillError(
+                    "Relation evidence must target the active learner move"
+                )
 
         inference_step: dict[str, Any] | None = None
         if inference_step_id:
@@ -4404,6 +4855,10 @@ def commit_turn(
                 raise SkillError(
                     "Inference evidence must target a step touching the "
                     "current learning node"
+                )
+            if active_move and active_move.get("target_id") != inference_step_id:
+                raise SkillError(
+                    "Inference evidence must target the active learner move"
                 )
 
         selected_target = ""
@@ -4480,6 +4935,101 @@ def commit_turn(
                 )
                 set_meta(connection, "current_node_id", selected_target)
 
+        next_move_raw = (
+            turn_update.get("next_move")
+            if turn_update is not None
+            else None
+        )
+        move_history = get_meta_optional(connection, "move_history", [])
+        if not isinstance(move_history, list):
+            move_history = []
+        if move_resolution is not None:
+            previous_attempts = active_move.get("attempts", [])
+            if not isinstance(previous_attempts, list):
+                previous_attempts = []
+            current_attempt = {
+                "outcome": move_outcome,
+                "learner_response": move_resolution["learner_response"],
+                "evidence_kind": move_resolution["evidence_kind"],
+                "accepted_parts": move_resolution["accepted_parts"],
+                "missing_link": move_resolution["missing_link"],
+                "recorded_at": utc_now(),
+            }
+            all_attempts = [*previous_attempts, current_attempt]
+            accepted_parts = list(
+                dict.fromkeys(
+                    [
+                        str(part)
+                        for attempt in all_attempts
+                        if isinstance(attempt, dict)
+                        for part in attempt.get("accepted_parts", [])
+                        if str(part).strip()
+                    ]
+                )
+            )
+            if move_outcome == "resolved":
+                closed_move = {
+                    "move_id": active_move["id"],
+                    "node_id": active_move["node_id"],
+                    "target_id": active_move["target_id"],
+                    "interaction_kind": active_move["interaction_kind"],
+                    "prompt": active_move["prompt"],
+                    "expected_answer": active_move["expected_answer"],
+                    "required_premises": active_move.get(
+                        "required_premises",
+                        [],
+                    ),
+                    "scope_boundary": active_move.get(
+                        "scope_boundary",
+                        "",
+                    ),
+                    "opened_at": active_move.get("opened_at", ""),
+                    "learner_response": move_resolution[
+                        "learner_response"
+                    ],
+                    "evidence_kind": move_resolution["evidence_kind"],
+                    "accepted_parts": accepted_parts,
+                    "resolved_statement": move_resolution[
+                        "resolved_statement"
+                    ],
+                    "attempts": all_attempts,
+                    "status": "resolved",
+                    "closed_at": utc_now(),
+                }
+                move_history.append(closed_move)
+                set_meta(connection, "move_history", move_history)
+                set_meta(connection, "active_move", {})
+            else:
+                repaired_move = dict(active_move)
+                repaired_move.update(
+                    {
+                        "status": "repair",
+                        "last_outcome": move_outcome,
+                        "learner_response": move_resolution[
+                            "learner_response"
+                        ],
+                        "accepted_parts": accepted_parts,
+                        "missing_link": move_resolution["missing_link"],
+                        "attempts": all_attempts,
+                        "updated_at": utc_now(),
+                    }
+                )
+                set_meta(connection, "active_move", repaired_move)
+        if next_move_raw is not None:
+            if move_resolution is not None and move_outcome != "resolved":
+                raise SkillError(
+                    "Only a resolved learner move may open a next move"
+                )
+            if bool(get_meta(connection, "course_complete")):
+                raise SkillError("A complete course cannot open a next move")
+            next_move_node_id = selected_target or current_id
+            next_active_move = normalize_learning_move(
+                next_move_raw,
+                current_node_id=next_move_node_id,
+            )
+            require_learning_move_target(connection, next_active_move)
+            set_meta(connection, "active_move", next_active_move)
+
         learning_phases = get_meta_optional(
             connection,
             "learning_phases",
@@ -4499,13 +5049,20 @@ def commit_turn(
 
         new_revision = revision + 1
         set_meta(connection, "revision", new_revision)
-        connection.execute(
-            """
-            INSERT INTO evidence(
-              node_id, revision, diagnosis, evidence_kind, created_at
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
-            (current_id, new_revision, diagnosis, evidence_kind, utc_now()),
+        record_node_evidence = move_outcome not in NON_EVIDENCE_MOVE_OUTCOMES
+        if record_node_evidence:
+            connection.execute(
+                """
+                INSERT INTO evidence(
+                  node_id, revision, diagnosis, evidence_kind, created_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (current_id, new_revision, diagnosis, evidence_kind, utc_now()),
+            )
+        relation_evidence_kind = (
+            move_resolution.get("evidence_kind", "none")
+            if move_resolution is not None
+            else evidence_kind
         )
         if relation_row is not None and relation_level is not None:
             level_order = {
@@ -4542,7 +5099,7 @@ def commit_turn(
                     relation_edge_id,
                     new_revision,
                     relation_level,
-                    evidence_kind,
+                    relation_evidence_kind,
                     utc_now(),
                 ),
             )
@@ -4608,6 +5165,20 @@ def commit_turn(
                         "relation_level": relation_level or "",
                         "inference_step_id": inference_step_id or "",
                         "inference_level": inference_level or "",
+                        "move_id": (
+                            move_resolution.get("move_id", "")
+                            if move_resolution is not None
+                            else ""
+                        ),
+                        "move_outcome": move_outcome,
+                        "node_evidence_recorded": record_node_evidence,
+                        "active_move_id": str(
+                            get_meta_optional(
+                                connection,
+                                "active_move",
+                                {},
+                            ).get("id", "")
+                        ),
                     }
                 ),
                 utc_now(),
@@ -4650,6 +5221,19 @@ def commit_turn(
             "relation_level": relation_level or "",
             "inference_step_id": inference_step_id or "",
             "inference_level": inference_level or "",
+            "move_id": (
+                move_resolution.get("move_id", "")
+                if move_resolution is not None
+                else ""
+            ),
+            "move_outcome": move_outcome,
+            "node_evidence_recorded": record_node_evidence,
+            "active_move_id": str(
+                get_meta_optional(connection, "active_move", {}).get(
+                    "id",
+                    "",
+                )
+            ),
         }
         return result
     except Exception:
@@ -4712,6 +5296,66 @@ def validate_database(
                 )
     if current_id and current_id not in learning_phases:
         errors.append("Current node must have a learning phase")
+    active_move = get_meta_optional(connection, "active_move", {})
+    if not isinstance(active_move, dict):
+        errors.append("active_move must be an object")
+        active_move = {}
+    elif active_move:
+        if active_move.get("status") not in {"open", "repair"}:
+            errors.append("active_move must be open or in repair")
+        if active_move.get("node_id") != current_id:
+            errors.append("active_move must belong to the current node")
+        if active_move.get("interaction_kind") not in INTERACTION_KINDS:
+            errors.append("active_move has an invalid interaction kind")
+        for field in ("id", "target_id", "prompt", "expected_answer"):
+            if not str(active_move.get(field, "")).strip():
+                errors.append(f"active_move.{field} is required")
+        if (
+            active_move.get("target_id")
+            and learning_move_target_exists(
+                connection,
+                str(active_move["target_id"]),
+            )
+        ):
+            try:
+                require_learning_move_target(connection, active_move)
+            except SkillError as exc:
+                errors.append(str(exc))
+        elif active_move.get("target_id"):
+            errors.append(
+                "active_move.target_id must name a node, semantic edge, "
+                "or inference step"
+            )
+        if not isinstance(active_move.get("attempts", []), list):
+            errors.append("active_move.attempts must be a list")
+    move_history = get_meta_optional(connection, "move_history", [])
+    if not isinstance(move_history, list):
+        errors.append("move_history must be a list")
+    else:
+        seen_move_ids: set[str] = set()
+        for index, item in enumerate(move_history):
+            if not isinstance(item, dict):
+                errors.append(f"move_history[{index}] must be an object")
+                continue
+            move_id = str(item.get("move_id", "")).strip()
+            if not move_id:
+                errors.append(f"move_history[{index}].move_id is required")
+            elif move_id in seen_move_ids:
+                errors.append(f"move_history contains duplicate id {move_id!r}")
+            else:
+                seen_move_ids.add(move_id)
+            if item.get("status") != "resolved":
+                errors.append(
+                    f"move_history[{index}] must contain a resolved move"
+                )
+            if not str(item.get("resolved_statement", "")).strip():
+                errors.append(
+                    f"move_history[{index}].resolved_statement is required"
+                )
+            if not isinstance(item.get("attempts", []), list):
+                errors.append(f"move_history[{index}].attempts must be a list")
+        if active_move.get("id") in seen_move_ids:
+            errors.append("active_move id already exists in move_history")
 
     unit_packets = get_meta_optional(connection, "unit_packets", {})
     if not isinstance(unit_packets, dict):
@@ -6201,6 +6845,14 @@ def build_parser() -> argparse.ArgumentParser:
         choices=sorted(RELATION_MASTERY_LEVELS - {"unassessed"}),
         help="Highest demonstrated mastery level for --inference-step.",
     )
+    commit_parser.add_argument(
+        "--turn",
+        type=Path,
+        help=(
+            "JSON closure or repair for the active learner move, optionally "
+            "including the next move."
+        ),
+    )
     commit_parser.set_defaults(
         handler=lambda args: commit_turn(
             args.course_dir,
@@ -6214,6 +6866,7 @@ def build_parser() -> argparse.ArgumentParser:
             relation_level=args.relation_level,
             inference_step_id=args.inference_step,
             inference_level=args.inference_level,
+            turn_path=args.turn.resolve() if args.turn else None,
         )
     )
 

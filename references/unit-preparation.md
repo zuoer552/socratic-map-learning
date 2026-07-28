@@ -29,8 +29,12 @@ several short Socratic turns without stuffing the entire book into context.
    instruction. Check that every premise was supplied, the move has a clear
    referent and one cognitive action, it does not repeat its own answer, source
    scope is preserved, and it advances one abstraction rung.
-7. Save the temporary JSON packet and call `prepare-unit`.
-8. Keep the returned full packet and receipt in conversation context. Routine
+7. If no learner move is already open, select one candidate as `active_move`.
+   Its `target_id` must name a real node, semantic edge, or inference step.
+   Preparing a packet may never replace or reset an open or repair move.
+8. Save the temporary JSON packet and call `prepare-unit`.
+9. Verify that the HTML shows the active prompt but not its expected answer.
+10. Keep the returned full packet and receipt in conversation context. Routine
    turns reuse them without new source reads.
 
 ## Packet schema
@@ -40,6 +44,19 @@ several short Socratic turns without stuffing the entire book into context.
   "current_node_id": "node-current",
   "unit_title": "本单元标题",
   "source_sha256": "optional-authoritative-source-fingerprint",
+  "active_move": {
+    "id": "move-current-connection",
+    "node_id": "node-current",
+    "target_id": "inference-current-connection",
+    "interaction_kind": "fill",
+    "prompt": "只补全这一根连接：……",
+    "expected_answer": "供教师判断的规范化关系，不在学习页面显示。",
+    "required_premises": [
+      "此前已经提供的前提一",
+      "此前已经提供的前提二"
+    ],
+    "scope_boundary": "这一回答不能进一步推出什么。"
+  },
   "excerpts": [
     {
       "id": "excerpt-1",
@@ -63,7 +80,10 @@ several short Socratic turns without stuffing the entire book into context.
 ```
 
 The runtime fills `version`, `status`, `prepared_at`, and the authoritative
-source fingerprint. A supplied fingerprint must match.
+source fingerprint. A supplied fingerprint must match. `active_move` is
+optional only when a move is already open or the turn is preparing source
+before choosing one. Once selected, its expected answer and required premises
+remain teacher-only runtime data.
 
 ## Selection rules
 
@@ -83,6 +103,9 @@ source fingerprint. A supplied fingerprint must match.
 - Reject a seed when `expected_answer` is unclear, any `required_premises` item
   has not been supplied, the answer merely paraphrases the prompt, or the claim
   exceeds `scope_boundary`.
+- Do not select a new `active_move` while the previous move is open or in
+  repair. Resolve it first; source refresh never grants permission to change
+  the intellectual target.
 - If the packet is insufficient, do one narrow refresh and replace the packet;
   do not scan the whole book.
 

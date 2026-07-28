@@ -27,7 +27,7 @@ The HTML is never authoritative.
 | Reviewable node | complete statement and evidence | What is being established, explained, interpreted, or used? |
 | Local relation | grounds, target, bridge, kind | How do these source-grounded elements connect? |
 | Route | current target, allowed next | What should be learned next? |
-| Learning cycle | phase, evidence, weakest relation | What kind of learner move is useful now? |
+| Learning cycle | phase, active move, evidence, weakest unresolved relation | What kind of learner move is useful now? |
 | View | source route, question page, disclosure | How is the system displayed? |
 
 No field from one layer substitutes for another.
@@ -335,6 +335,10 @@ A node is not robustly mastered because its sentence was repeated. The learner
 must reconstruct its incoming source-grounded relation and the outgoing
 `must_ask` transition.
 
+One resolved micro-connection may raise its relation to `understood` while the
+containing node remains `partial`. Node diagnosis and relation mastery are
+different layers; neither may erase the other.
+
 Local learning-cycle phases:
 
 - understanding;
@@ -348,6 +352,52 @@ relation or changes the canonical question chain. A new unit begins at
 `understanding`; a completed unit closes at `synthesis`. Transfer may be skipped
 when no source-faithful, relevant case exists.
 
+### Active learner move
+
+The runtime keeps exactly one optional `active_move`:
+
+```json
+{
+  "id": "move-current-link",
+  "node_id": "node-current",
+  "target_id": "inference-current-link",
+  "interaction_kind": "fill",
+  "prompt": "只补全这一根连接：……",
+  "expected_answer": "教师内部使用的规范关系。",
+  "required_premises": ["已经提供的前提"],
+  "scope_boundary": "不能从这一步推出什么。",
+  "status": "open",
+  "attempts": []
+}
+```
+
+`target_id` names a real node, semantic edge, or inference. `expected_answer`,
+required premises, learner responses, and attempts are teacher-only data. The
+public map receives only the prompt, target, status, and current missing link.
+
+The only active statuses are:
+
+- `open` — the learner has not yet attempted or the answer is awaiting review;
+- `repair` — accepted parts are preserved, but one named connection remains
+  unresolved.
+
+Resolution moves the full record to `move_history` with the learner's attempts,
+accepted parts, and one canonical `resolved_statement`. A resolved record is
+history, not an active status.
+
+`repair` is a substate inside the current learning-cycle phase, never a sixth
+phase. While a move is open or in repair, route, target, phase, and mastery are
+frozen. A source refresh may enrich the explanation but cannot replace the
+move. Prompt and explanation defects create no learner evidence.
+
+A turn update uses exactly one of these outcomes:
+
+- `resolved` — record `resolved_statement`; a next move may be opened;
+- `partial`, `misconception`, or `unknown` — record one `missing_link`; keep
+  the same move in repair;
+- `prompt_defect` or `explanation_defect` — record the defect as the missing
+  link, force evidence kind `none`, and repair the teaching design.
+
 Keep unit packets by current node rather than discarding them at the next unit.
 The active chat may use the shortest sufficient excerpt, while the map can
 progressively disclose the stored full source context and faithful translation.
@@ -360,14 +410,16 @@ legacy proposition field).
 A routine commit:
 
 1. checks the receipt;
-2. stores node evidence;
-3. optionally raises one relation mastery level;
-4. optionally updates the learning-cycle phase;
-5. advances the lesson route when appropriate;
-6. records the most recently demonstrated relation;
-7. runs cheap invariants;
-8. regenerates state output;
-9. atomically commits SQLite and HTML.
+2. resolves or repairs the active move before any target change;
+3. preserves attempts, accepted parts, the missing link, and the normalized
+   resolution;
+4. stores learner evidence only when the turn actually supplies it;
+5. optionally raises the resolved relation's mastery level;
+6. optionally updates phase or route only after resolution;
+7. optionally opens exactly one next move;
+8. records the most recently demonstrated relation;
+9. runs cheap invariants;
+10. regenerates state output and installs the derived HTML.
 
 Routine commits do not mutate the system spine or local-map topology.
 

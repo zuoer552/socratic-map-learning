@@ -68,6 +68,8 @@ for (const [pattern, message] of [
   [/function renderContentsPage\(/, "Missing source contents"],
   [/function renderUnitPage\(/, "Missing source-unit page"],
   [/function renderQuestionPage\(/, "Missing unique question page"],
+  [/function resolvedMovesMarkup\(/, "Missing resolved-move renderer"],
+  [/function activeMoveMarkup\(/, "Missing active-move renderer"],
   [/function renderProofFor\(/, "Missing local proof renderer"],
   [/function renderReasoning\(/, "Missing recursive proof disclosure"],
   [/function routeFromHash\(/, "Missing stable hash routing"],
@@ -85,17 +87,26 @@ for (const [pattern, message] of [
 const questionRenderer = html.match(
   /function renderQuestionPage\([\s\S]*?\n    function closeSidebar\(/
 )?.[0] || "";
+const resolvedPosition = questionRenderer.indexOf("${resolvedMovesMarkup(stage)}");
+const activeMovePosition = questionRenderer.indexOf("${activeMoveMarkup(stage)}");
 const proofPosition = questionRenderer.indexOf("${renderProofFor(stage)}");
 const contextPosition = questionRenderer.indexOf('<section class="question-context"');
 const chainPosition = questionRenderer.indexOf("${chainContext(stage)}");
 if (
   proofPosition < 0 ||
+  resolvedPosition < 0 ||
+  activeMovePosition < 0 ||
   contextPosition < 0 ||
   chainPosition < 0 ||
-  !(proofPosition < contextPosition && contextPosition < chainPosition)
+  !(
+    resolvedPosition < activeMovePosition &&
+    activeMovePosition < proofPosition &&
+    proofPosition < contextPosition &&
+    contextPosition < chainPosition
+  )
 ) {
   throw new Error(
-    "Question pages must show proof, then source context, then problem-chain context"
+    "Question pages must show closure, active move, proof, source, then chain"
   );
 }
 
@@ -108,6 +119,30 @@ if (snapshot.schema_version !== 7) {
   throw new Error(`Expected schema 7, got ${snapshot.schema_version}`);
 }
 const atlas = snapshot.argument_atlas;
+const learningCycle = snapshot.learning_cycle || {};
+const activeMove = learningCycle.active_move || {};
+for (const forbiddenField of [
+  "expected_answer",
+  "required_premises",
+  "learner_response",
+  "attempts"
+]) {
+  if (Object.hasOwn(activeMove, forbiddenField)) {
+    throw new Error(`Public active move leaks ${forbiddenField}`);
+  }
+}
+for (const move of learningCycle.resolved_moves || []) {
+  if (!move.resolved_statement) {
+    throw new Error("Resolved move lacks its canonical statement");
+  }
+  if (
+    Object.hasOwn(move, "expected_answer") ||
+    Object.hasOwn(move, "learner_response") ||
+    Object.hasOwn(move, "attempts")
+  ) {
+    throw new Error("Public resolved move leaks teacher-only history");
+  }
+}
 const spine = atlas?.system_spine;
 const structure = atlas?.source_structure;
 if (!atlas?.maps?.length || !Array.isArray(atlas.inferences)) {

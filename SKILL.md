@@ -20,11 +20,14 @@ Use this when the active node has a ready `unit_packet` and the latest runtime
 receipt is still in the conversation. Do not reread this skill, the source,
 templates, tests, or deep references.
 
-1. Diagnose the learner's latest answer from its actual reasoning.
+1. Close or repair the exact active learner move from the learner's actual
+   reasoning.
 2. Reuse one decisive excerpt from the prepared packet. Reuse across several
    turns is allowed when the same passage establishes the connection.
-3. Commit the diagnosis with the receipt already in hand.
-4. Respond naturally and end with exactly one useful learner move.
+3. Commit its normalized resolution or repair state with the receipt already
+   in hand.
+4. Respond naturally. Open a new target only after closure, and end with
+   exactly one useful learner move.
 
 Hard routine budget:
 
@@ -72,62 +75,29 @@ are derived views, never the authoritative learning state.
 
 ## Teaching response contract
 
-Every routine learner-facing reply must flow in this order without recurring
-rubric-like headings:
+[response-contract.md](references/response-contract.md) is the canonical
+learner-facing policy. Enforce these state rules before applying its prose
+shape:
 
-1. **Judgment and continuation** — say what the learner established, which
-   single connection is still missing, and why it matters.
-2. **Source identity** — show the shortest sufficient exact source span. Mark
-   source text, faithful translation, and teacher explanation as different
-   identities. Never put a paraphrase or teacher summary inside the source
-   quotation.
-3. **Expanded account** — reconstruct one core relation in two to five atomic
-   steps. Every step performs one mode-appropriate move. State the local route:
-   `previous result → current problem → current result → next pressure`.
-4. **Compressed synthesis** — restate the same chain in one compact sentence
-   that can be expanded back into the supplied steps. This is teacher
-   synthesis, not source wording.
-5. **One learner move** — require exactly one clear action: distinguish, fill
-   one link, judge, reconstruct, interpret, or transfer. It need not be an open
-   question. Generate the expected answer internally and verify that every
-   required premise has already been supplied.
-6. **Map link** — place the stable clickable HTML map link alone on the final
-   line. It must be the final visible content.
+1. An active move must be either resolved or placed in repair before the reply
+   can continue.
+2. A resolved reply states one normalized resolution near the top. It preserves
+   the intended relation but does not demand one exact wording.
+3. A partial answer preserves accepted parts and names one missing connection.
+   A misconception repairs the same target. An unknown answer first triggers a
+   prompt-and-explanation audit.
+4. While a move is open or in repair, do not change target, node, phase, or
+   mastery. Repair is a substate inside the current five-phase cycle, not a
+   sixth phase.
+5. Atomicity is learner-relative. Two to five displayed steps are a
+   presentation cap; split any step the learner cannot reconstruct.
+6. After closure, and only then, open exactly one eligible learner move.
 
-Before eliciting, classify the target: teach new authorial content; ask only for
-a relation derivable from supplied material; use a changed case for mastery.
-Reject an interaction if it needs an unstated premise, repeats its answer,
-contains an unclear pointer such as “this distinction,” uses meta-instruction
-such as “how does this help you explain,” narrows a source term, blurs
-normative, psychological, and ontological levels, or skips an abstraction
-rung. A learner's failure on an ineligible prompt is a prompt defect, not
-learning evidence. At a transition, teach the new faculty, period, method,
-voice, or principle before testing one concrete consequence.
-
-Do not show headings such as “判定、原文、解释、追问” in an ordinary turn unless
-the learner explicitly asks for a checklist. The reply should read like one
-teacher continuing one thought.
-
-If the answer is incomplete, make at most one smaller scaffold attempt. If it
-still fails, supply the missing account and test it in one new scenario. Never
-repeat paraphrases indefinitely.
-
-If the learner says the prompt itself is unclear, audit the prompt before
-diagnosing the answer. Name the ambiguous reference, missing premise, bundled
-cognitive actions, or abstraction jump; then replace it with one bounded
-learner move.
-
-At the close of a unit, briefly reconstruct:
-
-- the question;
-- the decisive source answer;
-- its premises, causes, conditions, or textual evidence;
-- the boundary, uncertainty, failure mode, or alternative;
-- the next problem it forces.
-
-Then test one reconstruction or transfer. High knowledge density comes from
-expanded reasoning, compact synthesis, and periodic closure, not from stacked
-questions.
+The normal visible order is:
+`resolution or repair → source identity → expanded connection → compact
+synthesis → one learner move → map link`. Keep the map link alone on the final
+line. Do not expose expected answers, internal ids, revisions, diagnoses, or
+runtime state.
 
 ## Five-phase learning cycle
 
@@ -153,6 +123,9 @@ Transitions depend on evidence, not turn count. Immediate prompted recall may
 establish `understood`; independent reconstruction, appropriate transfer, and
 later retrieval establish stronger levels.
 
+An unresolved move freezes the current phase. Its repair substate never counts
+as phase progress.
+
 ## Critical reading and real-world transfer
 
 Critical reading is not compulsory opposition. Transfer is not compulsory
@@ -172,7 +145,8 @@ Keep these layers independent:
 4. local reasoning maps:
    reviewable statements + explicit source-grounded relation junctions;
 5. lesson route;
-6. learner evidence, relation mastery, and current learning-cycle phase;
+6. active learner move, closure history, learner evidence, relation mastery,
+   and current learning-cycle phase;
 7. a compact conclusion plus an expandable atomic relation chain;
 8. two derived views:
    source-guided question pages and learning progress.
@@ -253,15 +227,19 @@ python3 scripts/sml.py commit <course-dir> \
   --expected-current <node-id> \
   --diagnosis <mastered|partial|misconception|unknown> \
   --evidence-kind <none|own_words_reason|correct_distinction|correct_transfer> \
+  --turn <turn-update.json> \
   [--learning-phase <understanding|verification|critical|transfer|synthesis>] \
   [--next <node-id>] \
   [--inference-step <inference-id> \
    --inference-level <understood|reconstructable|transferable|retained>]
 ```
 
-The commit output is the new receipt. Keep it in working context. A mastered
-claim requires positive evidence; familiarity, assent, or the teacher's own
-explanation is not evidence.
+`turn-update.json` closes or repairs the current move and may open the next one
+only when the current outcome is `resolved`. The runtime rejects advancement,
+phase change, or mastery increase while a move remains unresolved. The commit
+output is the new receipt. Keep it in working context. A mastered claim
+requires positive evidence; familiarity, assent, a defective prompt, or the
+teacher's own explanation is not evidence.
 
 For structural work only:
 

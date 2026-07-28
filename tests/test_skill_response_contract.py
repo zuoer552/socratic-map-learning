@@ -30,8 +30,8 @@ class SkillResponseContractTests(unittest.TestCase):
         self.assertIn("no PDF extraction", skill)
         self.assertIn("Reuse across several", skill)
         self.assertIn("turns is allowed", skill)
-        self.assertIn("end with exactly one useful learner move", skill)
-        self.assertIn("place the stable clickable HTML map link alone on the final", skill)
+        self.assertIn("exactly one useful learner move", skill)
+        self.assertIn("map link alone on the final", skill)
         self.assertLess(len(skill.encode("utf-8")), 15000)
 
     def test_contract_contains_confirmed_routine_constraints(self) -> None:
@@ -42,7 +42,7 @@ class SkillResponseContractTests(unittest.TestCase):
             "on the final line",
             "at most one essential new term",
             "at most one main example",
-            "make at most one smaller scaffold attempt",
+            "smaller scaffold attempt",
             "two to five atomic steps",
             "previous result → current problem → current result → next pressure",
             "source wording → faithful translation → teacher explanation",
@@ -52,6 +52,34 @@ class SkillResponseContractTests(unittest.TestCase):
         for phrase in required:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, contract)
+
+    def test_every_learner_move_closes_before_continuation(self) -> None:
+        skill = SKILL.read_text(encoding="utf-8")
+        contract = CONTRACT.read_text(encoding="utf-8")
+        course_model = (
+            SKILL_DIR / "references" / "course-model.md"
+        ).read_text(encoding="utf-8")
+        map_contract = (
+            SKILL_DIR / "references" / "map-contract.md"
+        ).read_text(encoding="utf-8")
+        combined = "\n".join((skill, contract, course_model, map_contract))
+        required = [
+            "normalized resolution near the top",
+            "hidden expected answer word for word",
+            "accepted parts",
+            "one missing connection",
+            "must not teach and test a different one",
+            "Atomicity is learner-relative",
+            "presentation cap",
+            "repair substate",
+            "not a sixth phase",
+            "Prompt and explanation defects create no learner evidence",
+            "Never serialize an open move's expected answer",
+            "last normalized resolution is shown near the top",
+        ]
+        for phrase in required:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, combined)
 
     def test_questions_pass_an_answerability_gate(self) -> None:
         skill = SKILL.read_text(encoding="utf-8")
@@ -180,12 +208,15 @@ class SkillResponseContractTests(unittest.TestCase):
         self.assertIn('"history": ("条关键历史关系", "历史关系掌握")', runtime)
 
     def test_documentation_and_version_are_updated(self) -> None:
-        self.assertEqual(VERSION.read_text(encoding="utf-8").strip(), "7.4.0")
+        self.assertEqual(VERSION.read_text(encoding="utf-8").strip(), "7.5.0")
         readme = README.read_text(encoding="utf-8")
-        self.assertIn("# Socratic Map Learning 7.4.0", readme)
+        self.assertIn("# Socratic Map Learning 7.5.0", readme)
         self.assertIn("response-contract.md", readme)
         self.assertIn("unit-preparation.md", readme)
         self.assertIn("progress-template-v2.html", readme)
+        self.assertNotIn("map-template-v5.html", readme)
+        self.assertNotIn("map-template-v6.html", readme)
+        self.assertNotIn("progress-template-v1.html", readme)
 
     def test_unit_preparation_defines_bounded_cache(self) -> None:
         preparation = UNIT_PREPARATION.read_text(encoding="utf-8")

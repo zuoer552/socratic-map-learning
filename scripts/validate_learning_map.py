@@ -1482,6 +1482,57 @@ def validate_v7(
         if isinstance(current_payload, dict)
         else ""
     )
+    learning_cycle = snapshot.get("learning_cycle", {})
+    if not isinstance(learning_cycle, dict):
+        errors.append("v7 graph-data learning_cycle must be an object")
+        learning_cycle = {}
+    active_move = learning_cycle.get("active_move", {})
+    if not isinstance(active_move, dict):
+        errors.append("v7 active learner move must be an object")
+        active_move = {}
+    forbidden_move_fields = {
+        "expected_answer",
+        "required_premises",
+        "learner_response",
+        "attempts",
+    }
+    leaked_fields = forbidden_move_fields.intersection(active_move)
+    if leaked_fields:
+        errors.append(
+            "v7 public active learner move leaks internal answer data: "
+            + ", ".join(sorted(leaked_fields))
+        )
+    if active_move:
+        for field in (
+            "id",
+            "node_id",
+            "target_id",
+            "interaction_kind",
+            "prompt",
+            "status",
+        ):
+            if not str(active_move.get(field, "")).strip():
+                errors.append(f"v7 active learner move needs {field}")
+        if active_move.get("status") not in {"open", "repair"}:
+            errors.append("v7 active learner move must be open or in repair")
+    resolved_moves = learning_cycle.get("resolved_moves", [])
+    if not isinstance(resolved_moves, list):
+        errors.append("v7 resolved_moves must be an array")
+        resolved_moves = []
+    for index, move in enumerate(resolved_moves):
+        if not isinstance(move, dict):
+            errors.append(f"v7 resolved_moves[{index}] must be an object")
+            continue
+        if not str(move.get("resolved_statement", "")).strip():
+            errors.append(
+                f"v7 resolved_moves[{index}] needs resolved_statement"
+            )
+        leaked_fields = forbidden_move_fields.intersection(move)
+        if leaked_fields:
+            errors.append(
+                f"v7 resolved_moves[{index}] leaks internal answer data: "
+                + ", ".join(sorted(leaked_fields))
+            )
     revealed_node_ids = {
         str(node_id)
         for argument_map in atlas.get("maps", [])
