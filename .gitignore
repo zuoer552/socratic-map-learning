@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.socratic-map/
+*.sqlite3
+*.sqlite3-*
+*.log
+dist/
