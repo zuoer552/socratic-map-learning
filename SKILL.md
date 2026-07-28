@@ -92,6 +92,13 @@ headings:
 5. **Map link** — place the stable clickable HTML map link alone on the final
    line. It must be the final visible content.
 
+Before asking, classify the target: teach new authorial content; ask only for a
+relation derivable from supplied material; use a changed case for mastery.
+Reject questions that need an unstated premise, merely repeat their own wording,
+narrow a source term, blur normative, psychological, and ontological levels, or
+skip an abstraction rung. At a theoretical transition, teach the new faculty or
+principle before testing one concrete consequence.
+
 Do not show headings such as “判定、原文、解释、追问” in an ordinary turn unless
 the learner explicitly asks for a checklist. The reply should read like one
 teacher continuing one thought.
@@ -113,22 +120,9 @@ teacher synthesis and periodic closure, not from asking multiple questions.
 
 ## Critical reading and real-world transfer
 
-Critical reading is not compulsory opposition. In each routine turn, naturally
-select the one lens that matters most now: claim precision, support, hidden
-premise, inference strength, scope or boundary, or an alternative
-interpretation. Choose by the learner's live confusion and the consequence for
-the current reading mode; never rotate through a fixed rubric. It is valid to
-conclude that a claim, causal account, method, or interpretation is strong.
-
-After two or three connected conclusions form a coherent local structure,
-normally test one transfer at unit closure. Cases may come only from verified
-news/public events, established historical knowledge/events, or ordinary
-low-stakes interpersonal situations. Never use AI, work, workplace, business,
-product, or operations cases. Verify time-sensitive or disputed public facts;
-otherwise choose history or an interpersonal case. Require `source relation →
-case facts → justified judgment → boundary or disanalogy`, not surface
-resemblance. Record sound critical analysis as `correct_distinction` and a
-structurally faithful application as `correct_transfer`.
+Critical reading is not compulsory opposition. Follow
+`response-contract.md` for the one consequential lens, source-safe transfer,
+and the distinction between `correct_distinction` and `correct_transfer`.
 
 ## System being built
 

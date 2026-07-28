@@ -52,6 +52,37 @@ class SkillResponseContractTests(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, contract)
 
+    def test_questions_pass_an_answerability_gate(self) -> None:
+        skill = SKILL.read_text(encoding="utf-8")
+        contract = CONTRACT.read_text(encoding="utf-8")
+        combined = f"{skill}\n{contract}"
+        required = [
+            "new authorial content",
+            "derivable relation",
+            "mastery evidence",
+            "Question eligibility gate",
+            "merely repeating the question",
+            "Normative, psychological, and ontological levels",
+            "concrete case → plain-language relation → author term → boundary",
+            "At a transition between faculties",
+        ]
+        for phrase in required:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, combined)
+
+    def test_unit_question_seeds_are_candidates_not_commands(self) -> None:
+        preparation = UNIT_PREPARATION.read_text(encoding="utf-8")
+        required = [
+            "candidate, not executable instruction",
+            "unintroduced premise",
+            "scope boundary",
+            "never authoritative",
+            "latest reasoning",
+        ]
+        for phrase in required:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, preparation)
+
     def test_contract_defines_critical_reading_and_transfer(self) -> None:
         skill = SKILL.read_text(encoding="utf-8")
         contract = CONTRACT.read_text(encoding="utf-8")
@@ -117,9 +148,9 @@ class SkillResponseContractTests(unittest.TestCase):
         self.assertIn('"history": ("条关键历史关系", "历史关系掌握")', runtime)
 
     def test_documentation_and_version_are_updated(self) -> None:
-        self.assertEqual(VERSION.read_text(encoding="utf-8").strip(), "7.2.0")
+        self.assertEqual(VERSION.read_text(encoding="utf-8").strip(), "7.3.0")
         readme = README.read_text(encoding="utf-8")
-        self.assertIn("# Socratic Map Learning 7.2.0", readme)
+        self.assertIn("# Socratic Map Learning 7.3.0", readme)
         self.assertIn("response-contract.md", readme)
         self.assertIn("unit-preparation.md", readme)
         self.assertIn("progress-template-v2.html", readme)

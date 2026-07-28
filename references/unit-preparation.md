@@ -19,10 +19,14 @@ several short Socratic turns without stuffing the entire book into context.
    unusable or layout itself matters.
 4. Select 2–6 short decisive excerpts. A packet may contain 1–12.
 5. For each excerpt, record how it connects to the current claim, cause,
-   method, interpretation, or boundary and, when useful, one plain-language
-   bridge, term, or question seed.
-6. Save the temporary JSON packet and call `prepare-unit`.
-7. Keep the returned full packet and receipt in conversation context. Routine
+   method, interpretation, or boundary. The connection note must distinguish
+   what the teacher must supply from what the learner can infer, and name any
+   scope boundary that affects the next question.
+6. Treat every question seed as a candidate, not executable instruction. Check
+   that it needs no unintroduced premise, does not repeat its own wording, keeps
+   source terms at their proper scope, and advances one abstraction rung.
+7. Save the temporary JSON packet and call `prepare-unit`.
+8. Keep the returned full packet and receipt in conversation context. Routine
    turns reuse them without new source reads.
 
 ## Packet schema
@@ -37,9 +41,9 @@ several short Socratic turns without stuffing the entire book into context.
       "id": "excerpt-1",
       "text": "一至三句准确原文。",
       "translation": "只在确有需要时提供。",
-      "connection": "这段话支持哪一个主张、原因、方法、解释或区分。",
+      "connection": "这段话支持什么；老师必须先讲什么；学习者已有何前提；边界在哪里。",
       "term": "本单元至多一个必要术语。",
-      "question_seed": "可由已有材料推出的一个小问题。",
+      "question_seed": "通过提问资格检查、可由已有材料推出的一个小问题。",
       "locator": "仅供内部核验，不在日常回复显示。"
     }
   ]
@@ -58,6 +62,10 @@ source fingerprint. A supplied fingerprint must match.
 - Do not fill the packet with broad background that will not affect a question.
 - Keep source text separate from translation, reconstruction, and teaching
   explanation.
+- A `question_seed` is never authoritative. Re-evaluate it against the learner's
+  latest reasoning and the response contract before use.
+- Reject a seed whose expected answer is an unintroduced authorial premise,
+  a paraphrase of the prompt, or a claim outside the excerpt's scope boundary.
 - If the packet is insufficient, do one narrow refresh and replace the packet;
   do not scan the whole book.
 

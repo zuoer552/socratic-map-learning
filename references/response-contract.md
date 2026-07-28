@@ -149,6 +149,15 @@ earlier only when the mapping is unusually direct and useful.
 Ask the learner to derive only what can be inferred from material already
 available.
 
+Classify the target before composing the question:
+
+- **new authorial content** — a definition, textual fact, hidden premise,
+  faculty, principle, or previously unstated argument step; teach it directly;
+- **derivable relation** — one consequence or connection licensed by premises
+  already supplied; ask one small question;
+- **mastery evidence** — a relation already taught; test it with a changed
+  example, reconstruction, distinction, or transfer.
+
 Directly teach:
 
 - new definitions;
@@ -167,6 +176,40 @@ For an unknown, partial, or mistaken answer:
 
 Socratic questioning is a tool for active reasoning, not a reason to withhold
 the book's content.
+
+## Question eligibility gate
+
+Before asking, verify all of the following:
+
+1. The learner has every premise needed for the expected answer.
+2. The answer cannot be produced by merely repeating the question's last
+   clause or replacing one phrase with a synonym.
+3. The question tests one relation rather than asking the learner to invent a
+   new authorial thesis.
+4. Source scope is preserved. A broad term such as “condition” must not silently
+   become the narrower “cause” unless the example is explicitly causal.
+5. Normative, psychological, and ontological levels remain distinct. A demand
+   of inquiry is not automatically a claim that people never stop, nor that its
+   desired object exists.
+6. The question advances only one rung:
+   `concrete case → plain-language relation → author term → boundary`.
+
+If any check fails, supply the missing account first and ask about one concrete
+consequence. At a transition between faculties, methods, narrators, periods, or
+argument levels, state what the previous one accomplished, what the new one
+adds, and why the transition is needed before questioning the learner.
+
+Reject, for example:
+
+> If a current cause still depends on an earlier condition, why does reason
+> continue asking for its cause?
+
+It narrows condition to cause, embeds its own superficial answer, and asks for
+reason's new function before teaching it. After explaining that reason seeks a
+more complete unity, ask instead:
+
+> If an explanation still depends on an unexplained condition, why is it only a
+> partial explanation?
 
 ## The one question
 
