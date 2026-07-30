@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "unit_id": "chapter-one",
+  "title": "第一章的问题树",
+  "source_text_sha256": "e30c60712cf33a421b1e793486e30e8347fefd96110d46a7041d7ffee2f42258",
+  "root_id": "q-governing",
+  "nodes": [
+    {
+      "id": "q-governing",
+      "parent_id": "",
+      "position": 1,
+      "question": "这一章为什么说认识不能只是事实的堆积？",
+      "recommended_answer": "因为事实只有进入一个可说明的判断结构，才不只是彼此无关的材料。作者把这个结构拆成对象、理由与适用边界：它们分别限定谈论对象、判断根据和结论有效的条件。",
+      "provenance": "editorial_synthesis",
+      "source": {
+        "locator": "第一章第 1 段",
+        "excerpt": "一个主张要成为知识，至少需要对象、理由与适用边界。"
+      },
+      "interpretive_note": "“判断结构”是依据本章三项要求所作的教学性整理。"
+    },
+    {
+      "id": "q-three-parts",
+      "parent_id": "q-governing",
+      "position": 1,
+      "question": "对象、理由与边界分别解决什么问题？",
+      "recommended_answer": "对象回答主张指向什么；理由回答凭什么接受这个判断；边界回答它在什么条件和范围内成立。三者不是三个额外事实，而是让同一个主张可理解、可检验且不过度推广的三个维度。",
+      "provenance": "source_explicit",
+      "source": {
+        "locator": "第一章第 1 段",
+        "excerpt": "对象回答我们在谈什么，理由回答为什么可以这样判断，边界回答这个判断在什么条件下成立。"
+      },
+      "interpretive_note": ""
+    },
+    {
+      "id": "q-missing-reason",
+      "parent_id": "q-governing",
+      "position": 2,
+      "question": "如果缺少理由，会发生什么？",
+      "recommended_answer": "结论仍然可能被说出来，却失去了让别人检查和接受它的根据，因此退化为断言。这里的重点不是断言一定为假，而是它尚未具备知识主张所需要的可说明性。",
+      "provenance": "editorial_synthesis",
+      "source": {
+        "locator": "第一章第 2 段",
+        "excerpt": "遗漏理由会让主张退化为断言"
+      },
+      "interpretive_note": "最后一句是在不扩大原文结论的前提下澄清“断言”的含义。"
+    },
+    {
+      "id": "q-missing-boundary",
+      "parent_id": "q-governing",
+      "position": 3,
+      "question": "为什么适用边界同样不可缺少？",
+      "recommended_answer": "因为没有边界，人们容易把只在特定条件下成立的局部结论推广到所有情况。边界不是削弱理论，而是准确说明理论究竟承诺了什么。",
+      "provenance": "editorial_synthesis",
+      "source": {
+        "locator": "第一章第 2 段",
+        "excerpt": "遗漏边界会让局部结论被错误地推广。"
+      },
+      "interpretive_note": "“不是削弱理论”是对边界功能的教学性说明。"
+    }
+  ],
+  "coverage": [
+    {
+      "locator": "第一章第 1 段",
+      "disposition": "knowledge",
+      "node_ids": [
+        "q-governing",
+        "q-three-parts"
+      ],
+      "reason": "提出全章主张并定义知识主张的三个组成维度。"
+    },
+    {
+      "locator": "第一章第 2 段",
+      "disposition": "knowledge",
+      "node_ids": [
+        "q-missing-reason",
+        "q-missing-boundary"
+      ],
+      "reason": "分别说明缺少理由与边界的后果，并给出理解理论的要求。"
+    }
+  ]
+}

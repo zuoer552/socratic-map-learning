@@ -1,0 +1,4 @@
+interface:
+  display_name: "Book Grilling"
+  short_description: "按作品来源单元一次一问，并用可视知识树系统讲清整本知识型作品"
+  default_prompt: "使用 $book-grilling 带我从当前作品开始一次一问地系统读完整本书。"

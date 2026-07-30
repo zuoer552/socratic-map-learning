@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "book": {
+    "id": "how-knowing-forms",
+    "title": "认识如何形成",
+    "author": "Book Grilling 演示作者",
+    "edition": "演示版 · 2026",
+    "language": "zh-CN"
+  },
+  "source": {
+    "path": "source.txt",
+    "kind": "plain-text",
+    "coverage_scope": "complete",
+    "coverage_note": ""
+  },
+  "safe_context": {
+    "source_token_limit": 8000,
+    "method": "演示文本很短，采用默认保守上限"
+  },
+  "source_units": [
+    {
+      "id": "part-one",
+      "parent_id": "",
+      "position": 1,
+      "kind": "部",
+      "title": "第一部　建立问题",
+      "locator": "目录：第一部",
+      "learning_unit": false
+    },
+    {
+      "id": "chapter-one",
+      "parent_id": "part-one",
+      "position": 1,
+      "kind": "章",
+      "title": "第一章　认识不是材料的堆积",
+      "locator": "第一部 · 第一章",
+      "learning_unit": true,
+      "sequence": 1,
+      "split_origin": "author",
+      "estimated_tokens": 180
+    },
+    {
+      "id": "chapter-two",
+      "parent_id": "part-one",
+      "position": 2,
+      "kind": "章",
+      "title": "第二章　问题决定解释路线",
+      "locator": "第一部 · 第二章",
+      "learning_unit": true,
+      "sequence": 2,
+      "split_origin": "author",
+      "estimated_tokens": 80
+    },
+    {
+      "id": "part-two",
+      "parent_id": "",
+      "position": 2,
+      "kind": "部",
+      "title": "第二部　检验解释",
+      "locator": "目录：第二部",
+      "learning_unit": false
+    },
+    {
+      "id": "chapter-three",
+      "parent_id": "part-two",
+      "position": 1,
+      "kind": "章",
+      "title": "第三章　反例与修正",
+      "locator": "第二部 · 第三章",
+      "learning_unit": true,
+      "sequence": 3,
+      "split_origin": "author",
+      "estimated_tokens": 80
+    }
+  ]
+}

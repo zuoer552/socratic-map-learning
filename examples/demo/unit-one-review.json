@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "artifact_type": "unit_tree",
+  "unit_id": "chapter-one",
+  "artifact_sha256": "648e62d5c8c9cf86adfca4d21e5d248920ca23cbf8c19a11084a791f563a835d",
+  "source_text_sha256": "e30c60712cf33a421b1e793486e30e8347fefd96110d46a7041d7ffee2f42258",
+  "verdict": "passed",
+  "reviewed_at": "2026-07-29T12:00:00+00:00",
+  "reviewer": {
+    "independent": true,
+    "method": "演示夹具：根据完整单元文本逐项核对问题树"
+  },
+  "checks": {
+    "source_complete": true,
+    "coverage_complete": true,
+    "answers_supported": true,
+    "no_scope_inflation": true,
+    "tree_valid": true,
+    "citations_exact": true
+  },
+  "issues": []
+}

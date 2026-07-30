@@ -1,121 +1,192 @@
-# Unit Preparation
+# Learning-unit question tree and independent review
 
-Use this reference only at course start, after the current node changes, when a
-prepared packet is missing or stale, or when a learner asks a source question
-the packet cannot answer.
+Read this only when context says `prepare_current_unit`, when repairing an
+invalidated unit, or when the source changed.
 
-## Goal
+## Preparation sequence
 
-Pay the source-reading cost once per learning unit. Prepare enough evidence for
-several short Socratic turns without stuffing the entire book into context.
+1. Extract the exact complete text of the current learning unit into UTF-8.
+2. Verify its first and last source spans, headings, paragraph continuity,
+   encoding, tables, footnotes, and quotations.
+3. Read the complete unit.
+4. Identify the unit's governing question.
+5. Decompose it into the questions needed to explain every substantive piece
+   of knowledge in this unit.
+6. Give every question one complete recommended answer and one exact excerpt.
+7. Classify every source span in the coverage ledger.
+8. Validate locally and fingerprint the exact text and normalized tree.
+9. Ask a fresh independent reviewer to compare only the text and tree.
+10. Repair every issue and repeat until the reviewer passes the exact hashes.
 
-## Procedure
+## Tree shape
 
-1. Run `context` only if no fresh receipt is available.
-2. Read the current node, prerequisites, relevant reasoning relation, confusion
-   notes, work mode, and source anchor.
-3. Inspect only the smallest source range needed to teach that unit. Prefer an
-   existing extracted text layer; render PDF pages only when the text layer is
-   unusable or layout itself matters.
-4. Select 2–6 shortest-sufficient decisive excerpts. A packet may contain
-   1–12. Preserve the complete sentence or local context separately when the
-   teaching excerpt is a fragment.
-5. For each excerpt, record how it connects to the current claim, cause,
-   method, interpretation, or boundary. The connection note must distinguish
-   what the teacher must supply from what the learner can infer, and name any
-   scope boundary that affects the next question.
-6. Draft one candidate learner move with an expected answer and an explicit
-   list of required premises. Treat it as a candidate, not executable
-   instruction. Check that every premise was supplied, the move has a clear
-   referent and one cognitive action, it does not repeat its own answer, source
-   scope is preserved, and it advances one abstraction rung.
-7. If no learner move is already open, select one candidate as `active_move`.
-   Its `target_id` must name a real node, semantic edge, or inference step.
-   Preparing a packet may never replace or reset an open or repair move.
-8. Save the temporary JSON packet and call `prepare-unit`.
-9. Verify that the HTML shows the active prompt but not its expected answer.
-10. Keep the returned full packet and receipt in conversation context. Routine
-   turns reuse them without new source reads.
+- One root: `What is this unit trying to explain or establish?`
+- Ordered children: its main subquestions.
+- Deeper children: required distinctions, reasons, mechanisms, objections,
+  replies, evidence, conditions, or boundaries.
+- The runtime traverses depth-first in sibling order.
+- Do not create concept, evidence, quotation, or taxonomy nodes. Express all
+  knowledge as questions.
+- Add a child only when it supplies a distinct explanatory move.
 
-## Packet schema
+## Node contract
+
+Each node contains:
 
 ```json
 {
-  "current_node_id": "node-current",
-  "unit_title": "本单元标题",
-  "source_sha256": "optional-authoritative-source-fingerprint",
-  "active_move": {
-    "id": "move-current-connection",
-    "node_id": "node-current",
-    "target_id": "inference-current-connection",
-    "interaction_kind": "fill",
-    "prompt": "只补全这一根连接：……",
-    "expected_answer": "供教师判断的规范化关系，不在学习页面显示。",
-    "required_premises": [
-      "此前已经提供的前提一",
-      "此前已经提供的前提二"
-    ],
-    "scope_boundary": "这一回答不能进一步推出什么。"
+  "id": "q-root",
+  "parent_id": "",
+  "position": 1,
+  "question": "这一单元总体要解决什么问题？",
+  "recommended_answer": "一个完整、可独立理解的答案。",
+  "provenance": "editorial_synthesis",
+  "source": {
+    "locator": "本单元第 1–3 段",
+    "excerpt": "必须是 unit.txt 中完全一致的最短充分原文。"
   },
-  "excerpts": [
-    {
-      "id": "excerpt-1",
-      "text": "对话中使用的最短充分准确原文。",
-      "full_text": "完整句子或必要的上下文。",
-      "translation": "忠实直译；不是教师解释。",
-      "connection": "这段话支持什么；老师必须先讲什么；学习者已有何前提；边界在哪里。",
-      "term": "本单元至多一个必要术语。",
-      "question_seed": "候选学习动作，不一定是开放问题。",
-      "interaction_kind": "distinguish",
-      "expected_answer": "一个明确、可共同判断的预期答案。",
-      "required_premises": [
-        "此前已经提供的前提一",
-        "此前已经提供的前提二"
-      ],
-      "scope_boundary": "这一连接不能推出什么。",
-      "locator": "仅供内部核验，不在日常回复显示。"
-    }
-  ]
+  "interpretive_note": "必要时说明整理、争议、翻译或范围；否则留空。"
 }
 ```
 
-The runtime fills `version`, `status`, `prepared_at`, and the authoritative
-source fingerprint. A supplied fingerprint must match. `active_move` is
-optional only when a move is already open or the turn is preparing source
-before choosing one. Once selected, its expected answer and required premises
-remain teacher-only runtime data.
+Allowed provenance:
 
-## Selection rules
+- `source_explicit` — the source states the answer directly;
+- `editorial_synthesis` — the answer faithfully organizes several source spans;
+- `external_context` — verified background, clearly separate from the work;
+- `contested_interpretation` — an interpretation that must name the dispute.
 
-- Accuracy outranks variety. Reusing one decisive passage is better than
-  searching for a new decorative quote every turn.
-- `text` is the shortest sufficient teaching span; `full_text` preserves the
-  complete source context when different. Mark every omission honestly.
-- Excerpts must directly establish, distinguish, contextualize, support, limit,
-  object, or reply within the current reading mode.
-- Do not fill the packet with broad background that will not affect a question.
-- Keep source text separate from translation, reconstruction, and teaching
-  explanation.
-- A `question_seed` is never authoritative. Re-evaluate it against the
-  learner's latest reasoning and the response contract before use. Prefer a
-  bounded distinction, completion, reconstruction, or judgment when an open
-  question would be vague.
-- Reject a seed when `expected_answer` is unclear, any `required_premises` item
-  has not been supplied, the answer merely paraphrases the prompt, or the claim
-  exceeds `scope_boundary`.
-- Do not select a new `active_move` while the previous move is open or in
-  repair. Resolve it first; source refresh never grants permission to change
-  the intellectual target.
-- If the packet is insufficient, do one narrow refresh and replace the packet;
-  do not scan the whole book.
+The recommended answer may contain several closely connected steps, but only
+one main answer. Split independently challengeable conclusions.
 
-## Boundary turn
+## Exact evidence
 
-If a mastered answer advances the current node, the same turn may:
+The displayed excerpt must:
 
-1. commit the old unit;
-2. prepare the new unit;
-3. give the new source-grounded transition question.
+- occur exactly in the extracted unit text;
+- be the shortest span sufficient to check the answer;
+- preserve qualifications and negation;
+- never place a paraphrase inside quotation marks.
 
-That extra work is allowed only at the boundary. Later turns return to the
-one-call fast path.
+For translations, the current edition is authoritative. Add original-language
+comparison only when the interpretation depends on it and identify the source.
+
+## Coverage ledger
+
+Classify the entire unit, not only the passages selected for questions:
+
+```json
+{
+  "locator": "第 4–6 段",
+  "disposition": "knowledge",
+  "node_ids": ["q-distinction", "q-boundary"],
+  "reason": "这三段建立核心区分并限定其范围。"
+}
+```
+
+Allowed dispositions:
+
+- `knowledge` — contributes substantive knowledge and names node ids;
+- `context` — necessary orientation but no distinct question;
+- `rhetorical` — repetition, transition, illustration, or style that adds no
+  new substantive knowledge.
+
+Every tree node must appear in at least one knowledge coverage item. Every unit
+span must be classified. Uncertain spans block review; do not disguise them as
+context or rhetoric.
+
+## Tree artifact
+
+```json
+{
+  "schema_version": 1,
+  "unit_id": "unit-one",
+  "title": "本单元问题树标题",
+  "source_text_sha256": "<fingerprint of exact UTF-8 unit text>",
+  "root_id": "q-root",
+  "nodes": [],
+  "coverage": []
+}
+```
+
+Get hashes with:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  fingerprint --text-file <unit.txt>
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  fingerprint --json-file <tree.json>
+```
+
+The JSON fingerprint used by the review must match the normalized artifact that
+`prepare-unit` accepts. Run a local prepare in a temporary course when schema
+normalization changes the artifact.
+
+## Independent reviewer
+
+Use a fresh agent/context when available. Give it:
+
+- exact complete unit text;
+- the candidate tree;
+- this node and coverage contract;
+- the review JSON schema below.
+
+Do not give it the generator's reasoning, preferred verdict, suspected errors,
+or prior repair explanation. The reviewer must actively try to falsify the
+tree.
+
+It checks:
+
+1. source text is complete and usable;
+2. every substantive span is represented;
+3. each answer follows from its cited source;
+4. no answer inflates scope, causality, necessity, or certainty;
+5. the parent-child question structure is coherent;
+6. every excerpt is exact;
+7. authorial statement, editorial synthesis, background, and dispute are
+   correctly identified.
+
+Required passed review:
+
+```json
+{
+  "schema_version": 1,
+  "artifact_type": "unit_tree",
+  "unit_id": "unit-one",
+  "artifact_sha256": "<canonical normalized tree hash>",
+  "source_text_sha256": "<exact unit text hash>",
+  "verdict": "passed",
+  "reviewed_at": "2026-07-29T12:00:00Z",
+  "reviewer": {
+    "independent": true,
+    "method": "fresh independent source-to-tree review"
+  },
+  "checks": {
+    "source_complete": true,
+    "coverage_complete": true,
+    "answers_supported": true,
+    "no_scope_inflation": true,
+    "tree_valid": true,
+    "citations_exact": true
+  },
+  "issues": []
+}
+```
+
+If independent review is unavailable, stop. Do not self-label the unit passed.
+
+## Install
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prepare-unit <course-dir> \
+  --tree <tree.json> \
+  --review <review.json> \
+  --source-text <unit.txt> \
+  --expected-revision <revision> \
+  --expected-unit <unit-id>
+```
+
+The runtime preserves the exact unit text locally, installs the immutable
+reviewed tree, marks only its root current, redacts locked answers from the
+reader payload, and regenerates the page.
