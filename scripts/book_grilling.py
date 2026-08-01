@@ -24,6 +24,9 @@ from typing import Any
 SCHEMA_VERSION = 1
 RUNTIME_DIR = ".book-grilling"
 STATE_FILE = "course.json"
+PREFETCH_DIR = "prefetch"
+PREFETCH_UNITS_DIR = "units"
+PREFETCH_PACKAGE_FILE = "package.json"
 TEMPLATE_FILE = (
     Path(__file__).resolve().parent.parent / "assets" / "reader-template.html"
 )
@@ -135,6 +138,18 @@ def runtime_path(course_dir: Path) -> Path:
 
 def state_path(course_dir: Path) -> Path:
     return runtime_path(course_dir) / STATE_FILE
+
+
+def prefetch_path(course_dir: Path) -> Path:
+    return runtime_path(course_dir) / PREFETCH_DIR
+
+
+def prefetch_units_path(course_dir: Path) -> Path:
+    return prefetch_path(course_dir) / PREFETCH_UNITS_DIR
+
+
+def prefetch_unit_path(course_dir: Path, unit_id: str) -> Path:
+    return prefetch_units_path(course_dir) / unit_id
 
 
 def read_state(course_dir: Path) -> dict[str, Any]:
@@ -627,6 +642,254 @@ def validate_review(
     }
 
 
+def course_fingerprint(state: dict[str, Any]) -> str:
+    """Fingerprint immutable course/source structure, never learning progress."""
+    return value_sha256(
+        {
+            "schema_version": state["schema_version"],
+            "book": state["book"],
+            "source": state["source"],
+            "source_units": state["source_units"],
+            "learning_unit_ids": state["learning_unit_ids"],
+            "safe_context": state["safe_context"],
+        }
+    )
+
+
+def source_unit(state: dict[str, Any], unit_id: str) -> dict[str, Any]:
+    unit = next(
+        (item for item in state["source_units"] if item["id"] == unit_id),
+        None,
+    )
+    if not isinstance(unit, dict):
+        raise BookGrillingError(f"Unknown learning unit: {unit_id}")
+    return unit
+
+
+def prefetch_target_unit_id(state: dict[str, Any]) -> str:
+    """Return the one bounded look-ahead target, or the urgent current unit."""
+    if state.get("book_status") != "learning":
+        return ""
+    current_id = str(state.get("current_unit_id", ""))
+    if not current_id:
+        return ""
+    units = state["learning_unit_ids"]
+    try:
+        current_index = units.index(current_id)
+    except ValueError as exc:
+        raise BookGrillingError(
+            f"Current unit is not in the learning sequence: {current_id!r}"
+        ) from exc
+    status = state["unit_records"][current_id]["status"]
+    if status in {"needs_preparation", "invalid"}:
+        return current_id
+    if status == "current" and current_index + 1 < len(units):
+        return str(units[current_index + 1])
+    return ""
+
+
+def cached_unit_paths(course_dir: Path, unit_id: str) -> dict[str, Path]:
+    directory = prefetch_unit_path(course_dir, unit_id)
+    return {
+        "directory": directory,
+        "source_text": directory / "unit.txt",
+        "tree": directory / "tree.json",
+        "review": directory / "review.json",
+        "package": directory / PREFETCH_PACKAGE_FILE,
+    }
+
+
+def read_utf8(path: Path, label: str) -> str:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise BookGrillingError(f"Could not read {label} {path}: {exc}") from exc
+    if not text.strip():
+        raise BookGrillingError(f"{label} cannot be empty")
+    return text
+
+
+def load_cached_unit(
+    course_dir: Path,
+    state: dict[str, Any],
+    unit_id: str,
+) -> dict[str, Any]:
+    paths = cached_unit_paths(course_dir, unit_id)
+    package = load_json(paths["package"])
+    if package.get("schema_version") != SCHEMA_VERSION:
+        raise BookGrillingError(
+            f"Cached package schema must be {SCHEMA_VERSION}"
+        )
+    if str(package.get("unit_id", "")) != unit_id:
+        raise BookGrillingError("Cached package unit_id does not match its directory")
+    expected = {
+        "book_id": state["book"]["id"],
+        "source_sha256": state["source"]["sha256"],
+        "course_sha256": course_fingerprint(state),
+        "source_unit_sha256": value_sha256(source_unit(state, unit_id)),
+    }
+    for key, value in expected.items():
+        if str(package.get(key, "")) != value:
+            raise BookGrillingError(
+                f"Cached package {key} does not match the current course"
+            )
+
+    source_text = read_utf8(paths["source_text"], "cached exact unit text")
+    raw_tree = load_json(paths["tree"])
+    tree = validate_tree(raw_tree, unit_id=unit_id, source_text=source_text)
+    if tree != raw_tree:
+        raise BookGrillingError("Cached tree is not normalized")
+    raw_review = load_json(paths["review"])
+    review = validate_review(
+        raw_review,
+        artifact_type="unit_tree",
+        artifact=tree,
+        source_hash=text_sha256(source_text),
+        unit_id=unit_id,
+    )
+    if review != raw_review:
+        raise BookGrillingError("Cached review is not normalized")
+
+    hashes = {
+        "source_text_sha256": text_sha256(source_text),
+        "tree_sha256": value_sha256(tree),
+        "review_sha256": value_sha256(review),
+    }
+    for key, value in hashes.items():
+        if str(package.get(key, "")) != value:
+            raise BookGrillingError(f"Cached package {key} is stale or corrupted")
+    return {
+        "source_text": source_text,
+        "tree": tree,
+        "review": review,
+        "package": package,
+        "paths": paths,
+    }
+
+
+def prefetch_status(course_dir: Path, state: dict[str, Any]) -> dict[str, Any]:
+    unit_id = prefetch_target_unit_id(state)
+    if not unit_id:
+        return {
+            "unit_id": "",
+            "status": "not_applicable",
+            "need": "wait_for_progress" if state.get("book_status") == "learning" else "complete",
+            "unit": None,
+            "error": "",
+        }
+    paths = cached_unit_paths(course_dir, unit_id)
+    status = "missing"
+    error = ""
+    if paths["package"].is_file():
+        try:
+            load_cached_unit(course_dir, state, unit_id)
+            status = "ready"
+        except BookGrillingError as exc:
+            status = "invalid"
+            error = str(exc)
+    current_record = state["unit_records"][str(state["current_unit_id"])]
+    if status == "ready" and current_record["status"] in {
+        "needs_preparation",
+        "invalid",
+    }:
+        need = "activate_prefetched_unit"
+    elif status == "ready":
+        need = "wait_for_progress"
+    else:
+        need = "prepare_prefetch_unit"
+    return {
+        "unit_id": unit_id,
+        "status": status,
+        "need": need,
+        "unit": source_unit(state, unit_id),
+        "error": error,
+        "cache_dir": str(paths["directory"]),
+    }
+
+
+def install_unit_artifacts(
+    state: dict[str, Any],
+    course_dir: Path,
+    *,
+    unit_id: str,
+    source_text: str,
+    tree: dict[str, Any],
+    review: dict[str, Any],
+    prepared_via: str,
+) -> dict[str, Any]:
+    evidence_path = runtime_path(course_dir) / "units" / f"{unit_id}.txt"
+    atomic_write_text(evidence_path, source_text)
+    order = tree_preorder(tree)
+    progress = {
+        node_id: {
+            "status": "current" if index == 0 else "locked",
+            "open_questions": [],
+            "learner_note": "",
+            "stance": "",
+            "resolved_at": "",
+        }
+        for index, node_id in enumerate(order)
+    }
+    state["unit_records"][unit_id].update(
+        {
+            "status": "current",
+            "tree": tree,
+            "review": review,
+            "progress": progress,
+            "current_node_id": order[0],
+            "source_text_path": str(evidence_path),
+            "prepared_at": utc_now(),
+            "prepared_via": prepared_via,
+            "completed_at": "",
+        }
+    )
+    state["current_unit_id"] = unit_id
+    state["current_node_id"] = order[0]
+    return {
+        "unit_id": unit_id,
+        "tree_sha256": review["artifact_sha256"],
+        "node_count": len(order),
+        "prepared_via": prepared_via,
+    }
+
+
+def archive_prefetch_units(
+    course_dir: Path,
+    state: dict[str, Any],
+    unit_ids: list[str],
+    *,
+    reason: str,
+) -> list[str]:
+    archived: list[str] = []
+    archive_root = runtime_path(course_dir) / "history" / "prefetch"
+    for unit_id in unit_ids:
+        source_directory = prefetch_unit_path(course_dir, unit_id)
+        if not source_directory.is_dir():
+            continue
+        archive_root.mkdir(parents=True, exist_ok=True)
+        base_name = f"{unit_id}-r{state['revision']}"
+        destination = archive_root / base_name
+        suffix = 2
+        while destination.exists():
+            destination = archive_root / f"{base_name}-{suffix}"
+            suffix += 1
+        shutil.move(str(source_directory), str(destination))
+        atomic_write_text(
+            destination / "archive.json",
+            json_text(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "unit_id": unit_id,
+                    "reason": reason,
+                    "archived_at": utc_now(),
+                }
+            )
+            + "\n",
+        )
+        archived.append(str(destination))
+    return archived
+
+
 def append_event(
     state: dict[str, Any],
     event_type: str,
@@ -766,6 +1029,12 @@ def context_payload(state: dict[str, Any]) -> dict[str, Any]:
             need = "prepare_current_unit"
         elif record.get("status") == "current":
             need = "continue_current_question"
+    course_dir = Path(str(state["course_dir"]))
+    prefetch = prefetch_status(course_dir, state)
+    if need == "prepare_current_unit" and prefetch["need"] == (
+        "activate_prefetched_unit"
+    ):
+        need = "activate_prefetched_unit"
     return {
         "schema_version": state["schema_version"],
         "receipt": {
@@ -795,6 +1064,7 @@ def context_payload(state: dict[str, Any]) -> dict[str, Any]:
             else []
         ),
         "page_path": state["page_path"],
+        "prefetch": prefetch,
     }
 
 
@@ -867,14 +1137,7 @@ def command_prepare_unit(args: argparse.Namespace) -> dict[str, Any]:
         raise BookGrillingError(
             f"Unit {unit_id} cannot be prepared from status {record['status']!r}"
         )
-    try:
-        source_text = args.source_text.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as exc:
-        raise BookGrillingError(
-            f"Could not read exact unit text {args.source_text}: {exc}"
-        ) from exc
-    if not source_text.strip():
-        raise BookGrillingError("Exact unit text cannot be empty")
+    source_text = read_utf8(args.source_text, "exact unit text")
     tree = validate_tree(
         load_json(args.tree),
         unit_id=unit_id,
@@ -887,43 +1150,128 @@ def command_prepare_unit(args: argparse.Namespace) -> dict[str, Any]:
         source_hash=text_sha256(source_text),
         unit_id=unit_id,
     )
-    evidence_path = runtime_path(course_dir) / "units" / f"{unit_id}.txt"
-    atomic_write_text(evidence_path, source_text)
-    order = tree_preorder(tree)
-    progress = {
-        node_id: {
-            "status": "current" if index == 0 else "locked",
-            "open_questions": [],
-            "learner_note": "",
-            "stance": "",
-            "resolved_at": "",
-        }
-        for index, node_id in enumerate(order)
-    }
-    record.update(
-        {
-            "status": "current",
-            "tree": tree,
-            "review": review,
-            "progress": progress,
-            "current_node_id": order[0],
-            "source_text_path": str(evidence_path),
-            "prepared_at": utc_now(),
-            "completed_at": "",
-        }
+    prepared = install_unit_artifacts(
+        state,
+        course_dir,
+        unit_id=unit_id,
+        source_text=source_text,
+        tree=tree,
+        review=review,
+        prepared_via="foreground",
     )
-    state["current_node_id"] = order[0]
     state["revision"] = int(state["revision"]) + 1
     state["updated_at"] = utc_now()
-    append_event(
-        state,
-        "unit_prepared",
-        {
-            "unit_id": unit_id,
-            "tree_sha256": review["artifact_sha256"],
-            "node_count": len(order),
-        },
+    append_event(state, "unit_prepared", prepared)
+    persist(state, course_dir)
+    return context_payload(state)
+
+
+def command_prefetch_context(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "book": state["book"],
+        "source": state["source"],
+        "safe_context": state["safe_context"],
+        "current_unit_id": state["current_unit_id"],
+        "prefetch": prefetch_status(course_dir, state),
+    }
+
+
+def command_cache_unit(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    target_id = prefetch_target_unit_id(state)
+    unit_id = validate_id(args.expected_unit, "expected_unit")
+    if not target_id:
+        raise BookGrillingError("No bounded prefetch target is currently available")
+    if unit_id != target_id:
+        raise BookGrillingError(
+            f"Stale prefetch target: expected {unit_id!r}, actual {target_id!r}"
+        )
+    record = state["unit_records"][unit_id]
+    if record["status"] not in {"future", "needs_preparation", "invalid"}:
+        raise BookGrillingError(
+            f"Unit {unit_id} cannot be cached from status {record['status']!r}"
+        )
+
+    source_text = read_utf8(args.source_text, "prefetched exact unit text")
+    tree = validate_tree(
+        load_json(args.tree),
+        unit_id=unit_id,
+        source_text=source_text,
     )
+    review = validate_review(
+        load_json(args.review),
+        artifact_type="unit_tree",
+        artifact=tree,
+        source_hash=text_sha256(source_text),
+        unit_id=unit_id,
+    )
+    package = {
+        "schema_version": SCHEMA_VERSION,
+        "unit_id": unit_id,
+        "book_id": state["book"]["id"],
+        "source_sha256": state["source"]["sha256"],
+        "course_sha256": course_fingerprint(state),
+        "source_unit_sha256": value_sha256(source_unit(state, unit_id)),
+        "source_text_sha256": text_sha256(source_text),
+        "tree_sha256": value_sha256(tree),
+        "review_sha256": value_sha256(review),
+        "cached_at": utc_now(),
+    }
+    paths = cached_unit_paths(course_dir, unit_id)
+    # package.json is the ready marker and is always written last.
+    atomic_write_text(paths["source_text"], source_text)
+    atomic_write_text(paths["tree"], json_text(tree) + "\n")
+    atomic_write_text(paths["review"], json_text(review) + "\n")
+    atomic_write_text(paths["package"], json_text(package) + "\n")
+    return {
+        "cached": package,
+        "prefetch": prefetch_status(course_dir, state),
+    }
+
+
+def command_activate_prefetched_unit(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    if int(state["revision"]) != args.expected_revision:
+        raise BookGrillingError(
+            f"Stale revision: expected {args.expected_revision}, "
+            f"actual {state['revision']}"
+        )
+    unit_id = str(state["current_unit_id"])
+    if unit_id != args.expected_unit:
+        raise BookGrillingError(
+            f"Stale unit: expected {args.expected_unit!r}, actual {unit_id!r}"
+        )
+    record = state["unit_records"][unit_id]
+    if record["status"] not in {"needs_preparation", "invalid"}:
+        raise BookGrillingError(
+            f"Unit {unit_id} cannot activate cache from status {record['status']!r}"
+        )
+    cached = load_cached_unit(course_dir, state, unit_id)
+    prepared = install_unit_artifacts(
+        state,
+        course_dir,
+        unit_id=unit_id,
+        source_text=cached["source_text"],
+        tree=cached["tree"],
+        review=cached["review"],
+        prepared_via="prefetch",
+    )
+    state["revision"] = int(state["revision"]) + 1
+    state["updated_at"] = utc_now()
+    archives = archive_prefetch_units(
+        course_dir,
+        state,
+        [unit_id],
+        reason="Promoted into the authoritative current unit",
+    )
+    if archives:
+        prepared["cache_archive"] = archives[0]
+    append_event(state, "prefetched_unit_activated", prepared)
     persist(state, course_dir)
     return context_payload(state)
 
@@ -956,6 +1304,8 @@ def command_commit(args: argparse.Namespace) -> dict[str, Any]:
     outcome = str(turn.get("outcome", "")).strip()
     if outcome not in {"open", "resolved"}:
         raise BookGrillingError("turn.outcome must be open or resolved")
+    prefetched_prepared: dict[str, Any] | None = None
+    prefetch_error = ""
 
     if outcome == "open":
         question = require_text(
@@ -1003,6 +1353,22 @@ def command_commit(args: argparse.Namespace) -> dict[str, Any]:
                 state["unit_records"][next_unit_id][
                     "status"
                 ] = "needs_preparation"
+                package_path = cached_unit_paths(course_dir, next_unit_id)["package"]
+                if package_path.is_file():
+                    try:
+                        cached = load_cached_unit(course_dir, state, next_unit_id)
+                        prefetched_prepared = install_unit_artifacts(
+                            state,
+                            course_dir,
+                            unit_id=next_unit_id,
+                            source_text=cached["source_text"],
+                            tree=cached["tree"],
+                            review=cached["review"],
+                            prepared_via="prefetch",
+                        )
+                    except BookGrillingError as exc:
+                        # A bad optional cache never blocks valid learning progress.
+                        prefetch_error = str(exc)
             else:
                 state["current_unit_id"] = ""
                 state["book_status"] = "ready_for_synthesis"
@@ -1016,6 +1382,25 @@ def command_commit(args: argparse.Namespace) -> dict[str, Any]:
     state["revision"] = int(state["revision"]) + 1
     state["updated_at"] = utc_now()
     append_event(state, "question_committed", event_payload)
+    if prefetched_prepared is not None:
+        archives = archive_prefetch_units(
+            course_dir,
+            state,
+            [prefetched_prepared["unit_id"]],
+            reason="Promoted into the authoritative current unit",
+        )
+        if archives:
+            prefetched_prepared["cache_archive"] = archives[0]
+        append_event(state, "prefetched_unit_activated", prefetched_prepared)
+    elif prefetch_error:
+        append_event(
+            state,
+            "prefetch_activation_skipped",
+            {
+                "unit_id": state["current_unit_id"],
+                "reason": prefetch_error,
+            },
+        )
     persist(state, course_dir)
     return context_payload(state)
 
@@ -1127,9 +1512,16 @@ def command_invalidate(args: argparse.Namespace) -> dict[str, Any]:
         raise BookGrillingError(f"Unknown learning unit: {unit_id}")
     reason = require_text(args.reason, "reason")
     start = state["learning_unit_ids"].index(unit_id)
+    affected_ids = list(state["learning_unit_ids"][start:])
     history_dir = runtime_path(course_dir) / "history"
     archived: list[str] = []
-    for affected_id in state["learning_unit_ids"][start:]:
+    prefetched_archived = archive_prefetch_units(
+        course_dir,
+        state,
+        affected_ids,
+        reason=reason,
+    )
+    for affected_id in affected_ids:
         record = state["unit_records"][affected_id]
         if record.get("tree") is not None:
             history_path = (
@@ -1168,7 +1560,12 @@ def command_invalidate(args: argparse.Namespace) -> dict[str, Any]:
     append_event(
         state,
         "unit_invalidated",
-        {"unit_id": unit_id, "reason": reason, "archives": archived},
+        {
+            "unit_id": unit_id,
+            "reason": reason,
+            "archives": archived,
+            "prefetch_archives": prefetched_archived,
+        },
     )
     persist(state, course_dir)
     return context_payload(state)
@@ -1302,11 +1699,27 @@ def validate_state(state: dict[str, Any]) -> list[str]:
 
 
 def command_audit(args: argparse.Namespace) -> dict[str, Any]:
-    state = read_state(args.course_dir.resolve())
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
     errors = validate_state(state)
+    warnings: list[str] = []
+    cache_root = prefetch_units_path(course_dir)
+    if cache_root.is_dir():
+        known_units = set(state.get("learning_unit_ids", []))
+        for directory in sorted(cache_root.iterdir()):
+            if not directory.is_dir():
+                continue
+            if directory.name not in known_units:
+                warnings.append(f"unknown prefetched unit directory: {directory.name}")
+                continue
+            try:
+                load_cached_unit(course_dir, state, directory.name)
+            except BookGrillingError as exc:
+                warnings.append(f"{directory.name} prefetch cache is invalid: {exc}")
     return {
         "ok": not errors,
         "errors": errors,
+        "warnings": warnings,
         "revision": state["revision"],
         "book_status": state["book_status"],
         "page_path": state["page_path"],
@@ -1363,6 +1776,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     context.add_argument("course_dir", type=Path)
     context.set_defaults(handler=command_context)
+
+    prefetch_context = subparsers.add_parser(
+        "prefetch-context",
+        help="Discover the one bounded look-ahead unit and cache status.",
+    )
+    prefetch_context.add_argument("course_dir", type=Path)
+    prefetch_context.set_defaults(handler=command_prefetch_context)
+
+    cache_unit = subparsers.add_parser(
+        "cache-unit",
+        help="Validate and cache one independently reviewed look-ahead unit.",
+    )
+    cache_unit.add_argument("course_dir", type=Path)
+    cache_unit.add_argument("--tree", type=Path, required=True)
+    cache_unit.add_argument("--review", type=Path, required=True)
+    cache_unit.add_argument("--source-text", type=Path, required=True)
+    cache_unit.add_argument("--expected-unit", required=True)
+    cache_unit.set_defaults(handler=command_cache_unit)
+
+    activate_prefetched = subparsers.add_parser(
+        "activate-prefetched-unit",
+        help="Install the validated cache for the current unprepared unit.",
+    )
+    activate_prefetched.add_argument("course_dir", type=Path)
+    activate_prefetched.add_argument("--expected-revision", type=int, required=True)
+    activate_prefetched.add_argument("--expected-unit", required=True)
+    activate_prefetched.set_defaults(handler=command_activate_prefetched_unit)
 
     fingerprint = subparsers.add_parser(
         "fingerprint", help="Fingerprint a review artifact or exact unit text."

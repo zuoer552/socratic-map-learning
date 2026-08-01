@@ -32,10 +32,56 @@ The response includes:
 - current learning unit and question;
 - next required action;
 - completed/total units;
-- reader path.
+- reader path;
+- bounded next-unit prefetch status.
 
 Pass the exact receipt values to the next mutating call. Stale calls fail
 without changing state.
+
+If the current unit needs preparation and its cache is ready, top-level `need`
+is `activate_prefetched_unit`.
+
+## Bounded prefetch cache
+
+Discover the eligible current-or-next target without user-supplied unit or page
+parameters:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-context <course-dir>
+```
+
+After exact extraction, tree validation, and independent review, cache it:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  cache-unit <course-dir> \
+  --tree <tree.json> \
+  --review <review.json> \
+  --source-text <unit.txt> \
+  --expected-unit <unit-id>
+```
+
+This writes only
+`.book-grilling/prefetch/units/<unit-id>/`. It does not edit authoritative
+progress or the reader. The package binds the cache to the book id, source
+fingerprint, immutable course structure, source-unit metadata, exact unit text,
+normalized tree, and passed review.
+
+Normally the final `commit` of the prior unit validates and installs the cache
+atomically. When preparation completes after that boundary, activate it using
+the current receipt:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  activate-prefetched-unit <course-dir> \
+  --expected-revision <revision> \
+  --expected-unit <unit-id>
+```
+
+Invalid, incomplete, missing, and stale caches never block a valid commit and
+never unlock answers. `audit` reports optional-cache problems as warnings while
+continuing to evaluate authoritative course validity.
 
 ## Turn update
 
@@ -139,6 +185,9 @@ The runtime archives that unit and every later prepared unit under:
 
 It then locks and clears the affected live versions. Re-extract, rebuild,
 independently review, and prepare the invalid unit.
+
+Affected prefetch caches are moved to `.book-grilling/history/prefetch/` rather
+than silently reused.
 
 ## Audit and render
 

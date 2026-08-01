@@ -1,6 +1,6 @@
 ---
 name: book-grilling
-description: Systematically teach a complete knowledge-oriented work one source-sized unit and one question at a time, giving a recommended answer while building a reviewed, progressively unlocked visual question tree. Use for 读书, 精读, 一次一问, 按章学习, guided reading, learning a whole nonfiction book, resuming a Book Grilling course, or reviewing completed unit knowledge trees.
+description: Systematically teach a complete knowledge-oriented work one source-sized unit and one question at a time, giving a recommended answer while building a reviewed, progressively unlocked visual question tree. Supports safe cross-session prefetch of the next unit. Use for 读书, 精读, 一次一问, 按章学习, 继续学习, 预制下一单元, guided reading, learning a whole nonfiction book, resuming a Book Grilling course, or reviewing completed unit knowledge trees.
 ---
 
 # Book Grilling
@@ -19,8 +19,8 @@ not claim closed-book recall, retention, or mastery.
 - Preserve the author's volume/part/chapter/section/essay numbering and names.
 - Split that structure into **learning units**: the largest coherent source
   blocks that fit safely in one preparation context.
-- Build no whole-book knowledge graph. Build one reviewed question tree only
-  when entering its learning unit.
+- Build no whole-book knowledge graph. Keep only the current reviewed question
+  tree plus at most one reviewed next-unit cache.
 - Every tree node is exactly:
   `one question + one recommended answer + exact source evidence`.
 - Show one question and its recommended answer at a time. The learner may
@@ -44,6 +44,9 @@ python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
 Use the returned receipt. Do not reread the full source, rebuild a completed
 tree, run a browser audit, or regenerate the page separately on a routine turn.
 
+If `need` is `activate_prefetched_unit`, activate it with the returned revision
+and unit id, then teach its root. Do not rebuild it.
+
 ### 2. Initialize a book once
 
 When no course exists, read
@@ -54,7 +57,31 @@ manifest, then run `init`.
 Initialization creates the book page and source navigation. Future units expose
 only their source title and location.
 
-### 3. Prepare one learning unit once
+### 3. Prefetch the next unit in another session
+
+Read [prefetch.md](references/prefetch.md) when the user asks to prebuild or
+prepare the next unit in parallel.
+
+The complete user-facing instruction may be as short as:
+
+> 使用 book-grilling 预制下一单元，完成后停下。
+
+Resolve the course automatically. Search the workspace for active
+`.book-grilling/course.json` files; use an explicitly named book when present,
+or the sole active course. If several active books remain ambiguous, ask only
+for the book title—never ask the learner for unit ids, revisions, page ranges,
+source locators, cache paths, or runtime parameters.
+
+Run `prefetch-context`; it discovers the single eligible target. Extract,
+generate, and independently review that unit exactly as normal, but finish with
+`cache-unit`, not `prepare-unit`. Background prefetch must not commit questions,
+change the current node, regenerate the reader, or edit `course.json`.
+
+If the cache is already ready, report that and stop. Do not scan or cache all
+later units: the bounded one-unit look-ahead keeps source position, review, and
+invalidation trustworthy.
+
+### 4. Prepare one learning unit once
 
 When context says `prepare_current_unit`, read
 [unit-preparation.md](references/unit-preparation.md).
@@ -70,7 +97,7 @@ When context says `prepare_current_unit`, read
 Never unlock a unit when the source is truncated, an excerpt is not exact, the
 coverage ledger is incomplete, or independent review is unavailable.
 
-### 4. Teach with the grilling loop
+### 5. Teach with the grilling loop
 
 Read [teaching-loop.md](references/teaching-loop.md) when starting or repairing
 a course's interaction policy.
@@ -88,13 +115,18 @@ If the learner has a doubt, answer it and commit `open`; remain on the same
 node. When the account is clear, commit `resolved`. A commit atomically updates
 the state, unlocks at most one node, and regenerates the page.
 
-### 5. Cross a unit boundary
+### 6. Cross a unit boundary
 
-After the last node resolves, the runtime archives the completed tree and moves
-to the next source unit. The next turn prepares that unit; it does not scan
-ahead during the previous unit's routine conversation.
+After the last node resolves, `commit` moves to the next source unit. If a valid
+prefetch cache is ready, the same atomic commit installs it and returns its root
+question immediately. If no valid cache exists, learning progress still commits
+normally and the result says `prepare_current_unit`.
 
-### 6. Close the whole work
+If background preparation finishes just after the boundary, the next `context`
+returns `activate_prefetched_unit`; activate it once and continue. This race-safe
+fallback is the only extra call the learning session may need.
+
+### 7. Close the whole work
 
 When context says `prepare_book_synthesis`, create one reviewed final account:
 
@@ -123,12 +155,21 @@ python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   context <course-dir>
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-context <course-dir>
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   fingerprint --text-file <unit.txt>
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   fingerprint --json-file <tree.json>
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   prepare-unit <course-dir> \
   --tree <tree.json> --review <review.json> --source-text <unit.txt> \
+  --expected-revision <revision> --expected-unit <unit-id>
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  cache-unit <course-dir> \
+  --tree <tree.json> --review <review.json> --source-text <unit.txt> \
+  --expected-unit <unit-id>
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  activate-prefetched-unit <course-dir> \
   --expected-revision <revision> --expected-unit <unit-id>
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   commit <course-dir> \
@@ -166,6 +207,9 @@ Routine turn:
 Slow work is allowed once at book initialization, once per unit preparation,
 and once at final synthesis.
 
+Background prefetch is that next unit's one allowed preparation pass. It is not
+a routine teaching turn and must never mutate live learning progress.
+
 ## Reader policy
 
 The generated reader is a calm academic editorial interface:
@@ -190,6 +234,9 @@ Reject a result that:
 - advances while the learner still has an unresolved doubt;
 - treats agreement with the author as required;
 - creates a whole-book graph or a global node taxonomy;
+- asks the learner to supply prefetch unit ids, revisions, page ranges, or
+  runtime commands that the skill can discover;
+- changes live progress or exposes cached answers while prefetching;
 - reveals locked answers in HTML, embedded JSON, or accessibility text;
 - performs more than one state/render call on a routine turn;
 - claims mastery, retention, or closed-book ability;

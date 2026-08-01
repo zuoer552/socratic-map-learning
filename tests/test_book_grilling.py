@@ -265,6 +265,36 @@ class BookGrillingRuntimeTest(unittest.TestCase):
             unit,
         )
 
+    def cache(
+        self,
+        tree: dict,
+        source_text_path: Path,
+        unit: str,
+    ) -> dict:
+        tree_path = self.write_json(f"{unit}-prefetch-tree.json", tree)
+        review = self.review(
+            "unit_tree",
+            tree,
+            tree["source_text_sha256"],
+            unit,
+        )
+        review_path = self.write_json(
+            f"{unit}-prefetch-review.json",
+            review,
+        )
+        return self.run_cli(
+            "cache-unit",
+            self.course,
+            "--tree",
+            tree_path,
+            "--review",
+            review_path,
+            "--source-text",
+            source_text_path,
+            "--expected-unit",
+            unit,
+        )
+
     def commit(
         self,
         *,
@@ -483,6 +513,215 @@ class BookGrillingRuntimeTest(unittest.TestCase):
         self.assertEqual(public["book_status"], "completed")
         self.assertNotIn("artifact_sha256", json.dumps(public))
         self.assertNotIn(str(self.course), json.dumps(public))
+
+    def test_prefetch_auto_activates_at_the_next_unit_boundary(self) -> None:
+        context = self.initialize()
+        context = self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        state_path = self.course / ".book-grilling" / "course.json"
+        page_path = self.course / "book-grilling.html"
+        state_before = state_path.read_bytes()
+        page_before = page_path.read_bytes()
+
+        background = self.run_cli("prefetch-context", self.course)
+        self.assertEqual(background["prefetch"]["unit_id"], "unit-two")
+        self.assertEqual(
+            background["prefetch"]["need"],
+            "prepare_prefetch_unit",
+        )
+        cached = self.cache(self.tree_two(), self.unit_two, "unit-two")
+        self.assertEqual(cached["prefetch"]["status"], "ready")
+
+        # Background preparation is isolated from progress and the reader.
+        self.assertEqual(state_before, state_path.read_bytes())
+        self.assertEqual(page_before, page_path.read_bytes())
+
+        context = self.commit(
+            node="q-root",
+            revision=context["receipt"]["revision"],
+            unit="unit-one",
+        )
+        revision_before_boundary = context["receipt"]["revision"]
+        context = self.commit(
+            node="q-condition",
+            revision=revision_before_boundary,
+            unit="unit-one",
+        )
+
+        self.assertEqual(context["receipt"]["revision"], revision_before_boundary + 1)
+        self.assertEqual(context["receipt"]["current_unit_id"], "unit-two")
+        self.assertEqual(context["current_node"]["id"], "q-boundary")
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            state["unit_records"]["unit-two"]["prepared_via"],
+            "prefetch",
+        )
+        self.assertEqual(
+            (self.course / ".book-grilling" / "units" / "unit-two.txt").read_text(
+                encoding="utf-8"
+            ),
+            self.unit_two_text,
+        )
+        self.assertFalse(
+            (
+                self.course
+                / ".book-grilling"
+                / "prefetch"
+                / "units"
+                / "unit-two"
+            ).exists()
+        )
+
+    def test_invalid_prefetch_never_blocks_learning_or_unlocks_answers(self) -> None:
+        context = self.initialize()
+        context = self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        self.cache(self.tree_two(), self.unit_two, "unit-two")
+        cached_text = (
+            self.course
+            / ".book-grilling"
+            / "prefetch"
+            / "units"
+            / "unit-two"
+            / "unit.txt"
+        )
+        cached_text.write_text("损坏的预制文本", encoding="utf-8")
+
+        context = self.commit(
+            node="q-root",
+            revision=context["receipt"]["revision"],
+            unit="unit-one",
+        )
+        context = self.commit(
+            node="q-condition",
+            revision=context["receipt"]["revision"],
+            unit="unit-one",
+        )
+        self.assertEqual(context["need"], "prepare_current_unit")
+        self.assertEqual(context["receipt"]["current_unit_id"], "unit-two")
+        state = json.loads(
+            (self.course / ".book-grilling" / "course.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            state["unit_records"]["unit-two"]["status"],
+            "needs_preparation",
+        )
+        self.assertIsNone(state["unit_records"]["unit-two"]["tree"])
+        page = (self.course / "book-grilling.html").read_text(encoding="utf-8")
+        self.assertNotIn("它用乙限定甲的适用范围。", page)
+        audit = self.run_cli("audit", self.course)
+        self.assertTrue(audit["ok"], audit["errors"])
+        self.assertTrue(audit["warnings"])
+
+    def test_prefetch_can_activate_after_a_boundary_race(self) -> None:
+        context = self.initialize()
+        context = self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        context = self.commit(
+            node="q-root",
+            revision=context["receipt"]["revision"],
+            unit="unit-one",
+        )
+        context = self.commit(
+            node="q-condition",
+            revision=context["receipt"]["revision"],
+            unit="unit-one",
+        )
+        self.assertEqual(context["need"], "prepare_current_unit")
+
+        background = self.run_cli("prefetch-context", self.course)
+        self.assertEqual(background["prefetch"]["unit_id"], "unit-two")
+        self.cache(self.tree_two(), self.unit_two, "unit-two")
+        context = self.run_cli("context", self.course)
+        self.assertEqual(context["need"], "activate_prefetched_unit")
+        context = self.run_cli(
+            "activate-prefetched-unit",
+            self.course,
+            "--expected-revision",
+            context["receipt"]["revision"],
+            "--expected-unit",
+            "unit-two",
+        )
+        self.assertEqual(context["current_node"]["id"], "q-boundary")
+        self.assertEqual(context["prefetch"]["status"], "not_applicable")
+
+    def test_invalidation_archives_affected_prefetch_cache(self) -> None:
+        context = self.initialize()
+        context = self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        self.cache(self.tree_two(), self.unit_two, "unit-two")
+        cache_dir = (
+            self.course
+            / ".book-grilling"
+            / "prefetch"
+            / "units"
+            / "unit-two"
+        )
+        self.assertTrue(cache_dir.is_dir())
+
+        self.run_cli(
+            "invalidate-unit",
+            self.course,
+            "--unit",
+            "unit-one",
+            "--reason",
+            "重新核对第一单元证据",
+            "--expected-revision",
+            context["receipt"]["revision"],
+        )
+        self.assertFalse(cache_dir.exists())
+        archives = list(
+            (
+                self.course
+                / ".book-grilling"
+                / "history"
+                / "prefetch"
+            ).glob("unit-two-r*")
+        )
+        self.assertEqual(len(archives), 1)
+        self.assertTrue((archives[0] / "archive.json").is_file())
+
+    def test_existing_course_without_prefetch_is_read_only_compatible(self) -> None:
+        context = self.initialize()
+        context = self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        state_path = self.course / ".book-grilling" / "course.json"
+        page_path = self.course / "book-grilling.html"
+        state_before = state_path.read_bytes()
+        page_before = page_path.read_bytes()
+        self.assertFalse(
+            (self.course / ".book-grilling" / "prefetch").exists()
+        )
+
+        resumed = self.run_cli("context", self.course)
+        self.assertEqual(resumed["receipt"], context["receipt"])
+        self.assertEqual(resumed["prefetch"]["status"], "missing")
+        self.assertEqual(state_path.read_bytes(), state_before)
+        self.assertEqual(page_path.read_bytes(), page_before)
+        audit = self.run_cli("audit", self.course)
+        self.assertTrue(audit["ok"], audit["errors"])
 
     def test_invalid_review_cannot_unlock_or_mutate_course(self) -> None:
         context = self.initialize()
