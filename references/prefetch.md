@@ -1,77 +1,175 @@
-# Cross-session next-unit prefetch
+# Persistent multi-unit prefetch
 
-Read this only in a background session asked to prepare the next Book Grilling
-unit, or when diagnosing its handoff.
+Read this only for batch prefetch, resume, progress inspection, or handoff
+diagnosis. Runtime state under `prefetch/` is optional sidecar data;
+`course.json` remains the sole learning-progress authority.
 
-## Short user contract
+## User contract
 
-The learner should only need to say:
+Accept these short requests without asking for ids, revisions, page ranges,
+locators, output names, worker counts, or JSON parameters:
 
-> 使用 book-grilling 预制下一单元，完成后停下。
+- `预制后续全部单元` — queue all remaining units;
+- `预制下一批` — extend the queue by five not-yet-targeted units;
+- `继续预制` — recover an interrupted coordinator and continue;
+- `预制进度` — validate and report the batch receipt.
 
-Find the course from the workspace and book title. If exactly one learning
-course exists, use it. If several are plausible and the conversation names no
-book, ask only which book. Never ask for a unit id, revision, page range,
-locator, output filename, or JSON parameter.
+Resolve the course from an explicit book title or the sole active course. If
+several remain genuinely ambiguous, ask only for the book title.
 
-## Discover, prepare, cache
+## Plan and resume
 
-1. Run `prefetch-context <course-dir>`.
-2. Obey its `prefetch.need`:
-   - `prepare_prefetch_unit`: prepare the returned unit;
-   - `wait_for_progress`: a valid cache already exists, or no later target is
-     eligible; report the status and stop;
-   - `activate_prefetched_unit`: the cached unit is already current and belongs
-     to the learning session; do not mutate progress from the background
-     session.
-3. Use the returned source path and unit locator to extract the exact complete
-   unit text. Do not infer a different unit or scan further ahead.
-4. Build the unit tree and coverage ledger under
-   [unit-preparation.md](unit-preparation.md).
-5. Obtain a fresh independent passed review over the exact text and normalized
-   tree.
-6. Rerun `prefetch-context` before writing. If the target changed, discard the
-   stale candidate or rebuild for the newly returned target.
-7. Run:
+For all remaining units:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-plan <course-dir> --mode remaining
+```
+
+For the next default batch:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-plan <course-dir> --mode next-batch
+```
+
+On explicit resume after the previous coordinator has ended:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-resume <course-dir>
+```
+
+Resume preserves every staged attempt. Do not call it while another coordinator
+is still active because it deliberately releases that coordinator's claims.
+
+## Coordinator loop
+
+Use available parallel capacity, normally no more than three active workers.
+Prioritize source order so the learner's nearest missing unit finishes first.
+Create a unique opaque token for every generator or reviewer context.
+
+### Generate
+
+Atomically claim one unit:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-claim <course-dir> \
+  --role generator --worker-token <unique-generator-token>
+```
+
+Give the generator only the returned unit, authoritative source, safe context,
+and [unit-preparation.md](unit-preparation.md). It must extract the exact complete
+unit, validate its boundaries, build the full question tree, and cover every
+substantive source span. Persist the normalized candidate before starting any
+review:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  stage-prefetch-unit <course-dir> \
+  --tree <tree.json> --source-text <unit.txt> \
+  --expected-unit <claimed-unit-id> \
+  --worker-token <same-generator-token>
+```
+
+Staging creates an immutable attempt directory. A later session can resume from
+it without regenerating content.
+
+### Independently review
+
+Use a fresh context that did not generate the unit:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-claim <course-dir> \
+  --role reviewer --worker-token <unique-reviewer-token>
+```
+
+The runtime refuses to give a unit back to its generator as reviewer. Give the
+reviewer only:
+
+- staged exact unit text;
+- staged normalized tree;
+- node, coverage, and review contracts;
+- the instruction to falsify source completeness, coverage, support, scope,
+  structure, and citation exactness.
+
+Never give it generator reasoning, intended verdict, suspected issues, or prior
+repair explanations.
+
+For a failed verdict, persist the exact report:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  record-prefetch-review <course-dir> \
+  --review <failed-review.json> \
+  --expected-unit <claimed-unit-id> \
+  --worker-token <same-reviewer-token>
+```
+
+The job becomes `repairing`. Claim it with a generator token, repair every
+issue, stage a new attempt, and use another fresh reviewer context. Repeat until
+the exact candidate passes.
+
+For a passed verdict, install only the staged hashes reviewed by that worker:
 
 ```bash
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   cache-unit <course-dir> \
-  --tree <tree.json> \
-  --review <review.json> \
-  --source-text <unit.txt> \
-  --expected-unit <unit-id-returned-by-prefetch-context>
+  --tree <staged-tree.json> --review <passed-review.json> \
+  --source-text <staged-unit.txt> --expected-unit <claimed-unit-id> \
+  --worker-token <same-reviewer-token>
 ```
 
-`cache-unit` performs the final target, source, course, tree, review, and hash
-checks. A stale or invalid candidate fails without changing learning progress.
+The runtime checks worker separation, source and course fingerprints, source
+unit metadata, staged hashes, normalized tree, all six review checks, empty
+passed issues, and review hashes. It removes any old ready marker first and
+writes `package.json` last.
 
-## Storage and handoff
+## Terminal receipt
 
-The optional cache is stored under:
+After each wave, and always before ending, run:
+
+```bash
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-status <course-dir>
+```
+
+The only successful batch terminal is:
+
+```json
+{
+  "status": "ready",
+  "complete": true,
+  "counts": {
+    "ready": 12
+  }
+}
+```
+
+`consumed` units may appear after learning has already activated them and also
+count as complete. Any other status means the batch is partial. Never say
+“预制完成” while work is queued, generating, pending review, reviewing,
+repairing, blocked, or stale. If the session must end, state the exact counts
+and tell the learner that `继续预制` resumes without discarding work.
+
+## Storage and ordered consumption
 
 ```text
-<course-dir>/.book-grilling/prefetch/units/<unit-id>/
-  unit.txt
-  tree.json
-  review.json
-  package.json
+<course-dir>/.book-grilling/prefetch/
+  batch.json
+  jobs/<unit-id>/job.json
+  jobs/<unit-id>/attempts/<n>/unit.txt
+  jobs/<unit-id>/attempts/<n>/tree.json
+  jobs/<unit-id>/attempts/<n>/review.json
+  units/<unit-id>/unit.txt
+  units/<unit-id>/tree.json
+  units/<unit-id>/review.json
+  units/<unit-id>/package.json
 ```
 
-`package.json` is written last and is the ready marker. `course.json` remains
-the sole authority for learning progress. Cache creation does not edit it or
-the reader.
-
-When the learner resolves the current unit's final node, `commit` validates and
-promotes a ready cache atomically. A corrupt, stale, incomplete, or missing
-cache is ignored and ordinary foreground preparation remains available. If the
-background session finishes just after the boundary, the learning session's
-next `context` returns `activate_prefetched_unit`.
-
-After promotion, the consumed cache is moved out of the pending area and into
-`.book-grilling/history/prefetch/`; it is no longer considered a look-ahead
-candidate.
-
-Invalidating a unit archives affected caches under
-`.book-grilling/history/prefetch/`. Never repair live state by copying cache
-files manually.
+Learning consumes only the exact next unit. Later ready units remain isolated;
+a hole never permits skipping. Promoted packages move to
+`.book-grilling/history/prefetch/`. Invalidating a unit marks affected queued or
+ready work stale and preserves its evidence for audited repair.

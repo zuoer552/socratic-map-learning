@@ -1,8 +1,7 @@
 # Learning-unit question tree and independent review
 
-Read this only when context says `prepare_current_unit`, when `prefetch-context`
-says `prepare_prefetch_unit`, when repairing an invalidated unit, or when the
-source changed.
+Read this only when context says `prepare_current_unit`, when a batch generator
+claims a unit, when repairing an invalidated unit, or when the source changed.
 
 ## Preparation sequence
 
@@ -192,6 +191,7 @@ The runtime preserves the exact unit text locally, installs the immutable
 reviewed tree, marks only its root current, redacts locked answers from the
 reader payload, and regenerates the page.
 
-In a background prefetch session, do not run `prepare-unit`. Use `cache-unit`
-as specified in [prefetch.md](prefetch.md). It validates the same artifacts but
-does not change `course.json`, unlock a node, or regenerate the reader.
+In a background batch, do not run `prepare-unit`. First use
+`stage-prefetch-unit`, then obtain a distinct independent review, and only then
+use `cache-unit` as specified in [prefetch.md](prefetch.md). These commands do
+not change `course.json`, unlock a node, or regenerate the reader.

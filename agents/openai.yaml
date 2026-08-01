@@ -1,4 +1,4 @@
 interface:
   display_name: "Book Grilling"
-  short_description: "一次一问读完整本书，并可跨会话安全预制下一单元"
-  default_prompt: "使用 $book-grilling 继续当前学习；如下一单元已有预制缓存，直接自动接管。"
+  short_description: "一次一问读完整本书，并可跨会话批量预制后续单元"
+  default_prompt: "使用 $book-grilling 继续当前学习；批量缓存按顺序自动接管，只有全部独立复核通过才算预制完成。"

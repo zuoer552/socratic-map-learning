@@ -16,9 +16,16 @@ import re
 import shutil
 import sys
 import tempfile
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Unix Codex hosts provide fcntl.
+    fcntl = None
 
 
 SCHEMA_VERSION = 1
@@ -27,6 +34,12 @@ STATE_FILE = "course.json"
 PREFETCH_DIR = "prefetch"
 PREFETCH_UNITS_DIR = "units"
 PREFETCH_PACKAGE_FILE = "package.json"
+PREFETCH_BATCH_FILE = "batch.json"
+PREFETCH_JOBS_DIR = "jobs"
+PREFETCH_JOB_FILE = "job.json"
+PREFETCH_LOCK_FILE = ".lock"
+DEFAULT_PREFETCH_BATCH_SIZE = 5
+PREFETCH_LEASE_SECONDS = 4 * 60 * 60
 TEMPLATE_FILE = (
     Path(__file__).resolve().parent.parent / "assets" / "reader-template.html"
 )
@@ -52,6 +65,17 @@ REVIEW_CHECKS = {
     "no_scope_inflation",
     "tree_valid",
     "citations_exact",
+}
+PREFETCH_JOB_STATUSES = {
+    "queued",
+    "generating",
+    "pending_review",
+    "reviewing",
+    "repairing",
+    "ready",
+    "blocked",
+    "consumed",
+    "stale",
 }
 
 
@@ -152,6 +176,41 @@ def prefetch_unit_path(course_dir: Path, unit_id: str) -> Path:
     return prefetch_units_path(course_dir) / unit_id
 
 
+def prefetch_batch_path(course_dir: Path) -> Path:
+    return prefetch_path(course_dir) / PREFETCH_BATCH_FILE
+
+
+def prefetch_jobs_path(course_dir: Path) -> Path:
+    return prefetch_path(course_dir) / PREFETCH_JOBS_DIR
+
+
+def prefetch_job_path(course_dir: Path, unit_id: str) -> Path:
+    return prefetch_jobs_path(course_dir) / unit_id / PREFETCH_JOB_FILE
+
+
+def prefetch_job_attempt_path(
+    course_dir: Path,
+    unit_id: str,
+    attempt: int,
+) -> Path:
+    return prefetch_jobs_path(course_dir) / unit_id / "attempts" / str(attempt)
+
+
+@contextmanager
+def prefetch_lock(course_dir: Path):
+    """Serialize sidecar queue mutations without touching course.json."""
+    path = prefetch_path(course_dir) / PREFETCH_LOCK_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+", encoding="utf-8") as handle:
+        if fcntl is not None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def read_state(course_dir: Path) -> dict[str, Any]:
     path = state_path(course_dir)
     if not path.is_file():
@@ -159,6 +218,17 @@ def read_state(course_dir: Path) -> dict[str, Any]:
             f"No Book Grilling course found at {course_dir}. Run init first."
         )
     return load_json(path)
+
+
+def require_source_integrity(state: dict[str, Any]) -> None:
+    path = Path(str(state.get("source", {}).get("path", "")))
+    if not path.is_file():
+        raise BookGrillingError(f"Authoritative source is missing: {path}")
+    if file_sha256(path) != state["source"].get("sha256"):
+        raise BookGrillingError(
+            "Authoritative source fingerprint changed; invalidate or rebuild "
+            "the course before prefetching"
+        )
 
 
 def validate_id(value: Any, label: str) -> str:
@@ -642,6 +712,69 @@ def validate_review(
     }
 
 
+def validate_failed_review(
+    raw: dict[str, Any],
+    *,
+    artifact: dict[str, Any],
+    source_hash: str,
+    unit_id: str,
+) -> dict[str, Any]:
+    if raw.get("schema_version") != SCHEMA_VERSION:
+        raise BookGrillingError(
+            f"review.schema_version must be {SCHEMA_VERSION}"
+        )
+    if str(raw.get("artifact_type", "")) != "unit_tree":
+        raise BookGrillingError("review.artifact_type must be 'unit_tree'")
+    if str(raw.get("unit_id", "")) != unit_id:
+        raise BookGrillingError(f"review.unit_id must be {unit_id!r}")
+    if str(raw.get("verdict", "")) != "failed":
+        raise BookGrillingError("Recorded repair review verdict must be failed")
+    if str(raw.get("artifact_sha256", "")) != value_sha256(artifact):
+        raise BookGrillingError(
+            "review.artifact_sha256 does not match the staged artifact"
+        )
+    if str(raw.get("source_text_sha256", "")) != source_hash:
+        raise BookGrillingError(
+            "review.source_text_sha256 does not match the staged source"
+        )
+    reviewer = raw.get("reviewer")
+    if not isinstance(reviewer, dict) or reviewer.get("independent") is not True:
+        raise BookGrillingError("review.reviewer.independent must be true")
+    checks = raw.get("checks")
+    if not isinstance(checks, dict):
+        raise BookGrillingError("review.checks must be an object")
+    missing = sorted(REVIEW_CHECKS - set(checks))
+    non_boolean = sorted(
+        name for name in REVIEW_CHECKS if not isinstance(checks.get(name), bool)
+    )
+    failed = sorted(name for name in REVIEW_CHECKS if checks.get(name) is False)
+    if missing or non_boolean or not failed:
+        raise BookGrillingError(
+            "A failed review needs every boolean check and at least one failure; "
+            f"missing={missing}, non_boolean={non_boolean}, failed={failed}"
+        )
+    issues = raw.get("issues")
+    if not isinstance(issues, list) or not issues:
+        raise BookGrillingError("A failed review must describe at least one issue")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "artifact_type": "unit_tree",
+        "unit_id": unit_id,
+        "artifact_sha256": value_sha256(artifact),
+        "source_text_sha256": source_hash,
+        "reviewed_at": require_text(raw.get("reviewed_at"), "review.reviewed_at"),
+        "reviewer": {
+            "independent": True,
+            "method": require_text(
+                reviewer.get("method"), "review.reviewer.method"
+            ),
+        },
+        "checks": {name: bool(checks[name]) for name in sorted(REVIEW_CHECKS)},
+        "issues": issues,
+        "verdict": "failed",
+    }
+
+
 def course_fingerprint(state: dict[str, Any]) -> str:
     """Fingerprint immutable course/source structure, never learning progress."""
     return value_sha256(
@@ -664,6 +797,298 @@ def source_unit(state: dict[str, Any], unit_id: str) -> dict[str, Any]:
     if not isinstance(unit, dict):
         raise BookGrillingError(f"Unknown learning unit: {unit_id}")
     return unit
+
+
+def prefetch_candidate_unit_ids(state: dict[str, Any]) -> list[str]:
+    """Return every current-or-future unit that can be prepared independently."""
+    if state.get("book_status") != "learning":
+        return []
+    current_id = str(state.get("current_unit_id", ""))
+    if not current_id:
+        return []
+    units = list(state["learning_unit_ids"])
+    try:
+        current_index = units.index(current_id)
+    except ValueError as exc:
+        raise BookGrillingError(
+            f"Current unit is not in the learning sequence: {current_id!r}"
+        ) from exc
+    current_status = state["unit_records"][current_id]["status"]
+    start = (
+        current_index
+        if current_status in {"needs_preparation", "invalid"}
+        else current_index + 1
+    )
+    return [
+        unit_id
+        for unit_id in units[start:]
+        if state["unit_records"][unit_id]["status"]
+        in {"future", "needs_preparation", "invalid"}
+    ]
+
+
+def worker_fingerprint(worker_token: str) -> str:
+    token = require_text(worker_token, "worker_token")
+    return text_sha256(token)
+
+
+def load_prefetch_batch(
+    course_dir: Path,
+    state: dict[str, Any],
+) -> dict[str, Any] | None:
+    path = prefetch_batch_path(course_dir)
+    if not path.is_file():
+        return None
+    batch = load_json(path)
+    if batch.get("schema_version") != SCHEMA_VERSION:
+        raise BookGrillingError(
+            f"Prefetch batch schema must be {SCHEMA_VERSION}"
+        )
+    batch_id = validate_id(batch.get("batch_id"), "batch.batch_id")
+    mode = str(batch.get("mode", ""))
+    if mode not in {"remaining", "next-batch"}:
+        raise BookGrillingError("batch.mode must be remaining or next-batch")
+    target_ids = batch.get("target_unit_ids")
+    if not isinstance(target_ids, list):
+        raise BookGrillingError("batch.target_unit_ids must be an array")
+    target_ids = [validate_id(item, "batch target unit") for item in target_ids]
+    if len(target_ids) != len(set(target_ids)):
+        raise BookGrillingError("batch.target_unit_ids contains duplicates")
+    learning_ids = state["learning_unit_ids"]
+    if any(unit_id not in learning_ids for unit_id in target_ids):
+        raise BookGrillingError("Prefetch batch contains an unknown unit")
+    expected_order = sorted(target_ids, key=learning_ids.index)
+    if target_ids != expected_order:
+        raise BookGrillingError("Prefetch batch targets are out of source order")
+    if str(batch.get("course_sha256", "")) != course_fingerprint(state):
+        raise BookGrillingError(
+            "Prefetch batch does not match the current immutable course"
+        )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "batch_id": batch_id,
+        "mode": mode,
+        "course_sha256": course_fingerprint(state),
+        "source_sha256": state["source"]["sha256"],
+        "target_unit_ids": target_ids,
+        "created_at": require_text(batch.get("created_at"), "batch.created_at"),
+        "updated_at": require_text(batch.get("updated_at"), "batch.updated_at"),
+    }
+
+
+def write_prefetch_batch(course_dir: Path, batch: dict[str, Any]) -> None:
+    atomic_write_text(prefetch_batch_path(course_dir), json_text(batch) + "\n")
+
+
+def load_prefetch_job(
+    course_dir: Path,
+    unit_id: str,
+) -> dict[str, Any] | None:
+    path = prefetch_job_path(course_dir, unit_id)
+    if not path.is_file():
+        return None
+    job = load_json(path)
+    if job.get("schema_version") != SCHEMA_VERSION:
+        raise BookGrillingError(
+            f"Prefetch job schema must be {SCHEMA_VERSION}: {unit_id}"
+        )
+    if str(job.get("unit_id", "")) != unit_id:
+        raise BookGrillingError(f"Prefetch job unit mismatch: {unit_id}")
+    if job.get("status") not in PREFETCH_JOB_STATUSES:
+        raise BookGrillingError(f"Prefetch job has invalid status: {unit_id}")
+    return job
+
+
+def write_prefetch_job(
+    course_dir: Path,
+    job: dict[str, Any],
+) -> None:
+    unit_id = validate_id(job.get("unit_id"), "job.unit_id")
+    atomic_write_text(
+        prefetch_job_path(course_dir, unit_id),
+        json_text(job) + "\n",
+    )
+
+
+def new_prefetch_job(
+    state: dict[str, Any],
+    batch: dict[str, Any],
+    unit_id: str,
+) -> dict[str, Any]:
+    now = utc_now()
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "batch_id": batch["batch_id"],
+        "unit_id": unit_id,
+        "course_sha256": course_fingerprint(state),
+        "source_unit_sha256": value_sha256(source_unit(state, unit_id)),
+        "status": "queued",
+        "attempt": 0,
+        "claim": None,
+        "generated_by": "",
+        "reviewed_by": "",
+        "artifacts": None,
+        "last_error": "",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def ensure_prefetch_jobs(
+    course_dir: Path,
+    state: dict[str, Any],
+    batch: dict[str, Any],
+) -> None:
+    for unit_id in batch["target_unit_ids"]:
+        if load_prefetch_job(course_dir, unit_id) is not None:
+            continue
+        job = new_prefetch_job(state, batch, unit_id)
+        package_path = cached_unit_paths(course_dir, unit_id)["package"]
+        if package_path.is_file():
+            try:
+                load_cached_unit(course_dir, state, unit_id)
+                job["status"] = "ready"
+            except BookGrillingError as exc:
+                job["status"] = "blocked"
+                job["last_error"] = str(exc)
+        write_prefetch_job(course_dir, job)
+
+
+def recover_prefetch_claims(
+    course_dir: Path,
+    batch: dict[str, Any],
+    *,
+    force: bool,
+) -> list[str]:
+    recovered: list[str] = []
+    now_epoch = int(time.time())
+    for unit_id in batch["target_unit_ids"]:
+        job = load_prefetch_job(course_dir, unit_id)
+        if not job or job["status"] not in {"generating", "reviewing"}:
+            continue
+        claim = job.get("claim")
+        expires_at = int(claim.get("expires_at", 0)) if isinstance(claim, dict) else 0
+        if not force and expires_at > now_epoch:
+            continue
+        job["status"] = (
+            "pending_review"
+            if job["status"] == "reviewing" and job.get("artifacts")
+            else "repairing"
+            if int(job.get("attempt", 0)) > 0
+            else "queued"
+        )
+        job["claim"] = None
+        job["updated_at"] = utc_now()
+        job["last_error"] = "Recovered an interrupted worker claim"
+        write_prefetch_job(course_dir, job)
+        recovered.append(unit_id)
+    return recovered
+
+
+def prefetched_job_status(
+    course_dir: Path,
+    state: dict[str, Any],
+    unit_id: str,
+    *,
+    deep_validate: bool,
+) -> tuple[str, str]:
+    record_status = state["unit_records"][unit_id]["status"]
+    if record_status in {"current", "completed"}:
+        return "consumed", ""
+    package_path = cached_unit_paths(course_dir, unit_id)["package"]
+    if package_path.is_file():
+        if not deep_validate:
+            return "ready", ""
+        try:
+            load_cached_unit(course_dir, state, unit_id)
+            return "ready", ""
+        except BookGrillingError as exc:
+            return "blocked", str(exc)
+    job = load_prefetch_job(course_dir, unit_id)
+    if not job:
+        return "queued", ""
+    status = str(job["status"])
+    if status == "ready":
+        return "blocked", "Ready job is missing its validated package"
+    claim = job.get("claim")
+    if status in {"generating", "reviewing"} and isinstance(claim, dict):
+        if int(claim.get("expires_at", 0)) <= int(time.time()):
+            return (
+                "pending_review" if status == "reviewing" else "repairing",
+                "Worker lease expired; resume can reclaim this job",
+            )
+    return status, str(job.get("last_error", ""))
+
+
+def prefetch_batch_status(
+    course_dir: Path,
+    state: dict[str, Any],
+    *,
+    include_units: bool,
+    deep_validate: bool = True,
+) -> dict[str, Any]:
+    try:
+        batch = load_prefetch_batch(course_dir, state)
+    except BookGrillingError as exc:
+        return {
+            "status": "stale",
+            "complete": False,
+            "batch_id": "",
+            "mode": "",
+            "counts": {"stale": 1},
+            "total": 0,
+            "error": str(exc),
+            "units": [],
+        }
+    if batch is None:
+        return {
+            "status": "idle",
+            "complete": False,
+            "batch_id": "",
+            "mode": "",
+            "counts": {},
+            "total": 0,
+            "error": "",
+            "units": [],
+        }
+    counts: dict[str, int] = {}
+    units: list[dict[str, Any]] = []
+    for unit_id in batch["target_unit_ids"]:
+        status, error = prefetched_job_status(
+            course_dir,
+            state,
+            unit_id,
+            deep_validate=deep_validate,
+        )
+        counts[status] = counts.get(status, 0) + 1
+        if include_units:
+            job = load_prefetch_job(course_dir, unit_id)
+            units.append(
+                {
+                    "unit_id": unit_id,
+                    "status": status,
+                    "attempt": int(job.get("attempt", 0)) if job else 0,
+                    "error": error,
+                    "unit": source_unit(state, unit_id),
+                }
+            )
+    complete = all(
+        status in {"ready", "consumed"}
+        for status in counts
+        if counts[status]
+    ) and sum(counts.values()) == len(batch["target_unit_ids"])
+    blocked = any(counts.get(item, 0) for item in {"blocked", "stale"})
+    status = "ready" if complete else "blocked" if blocked else "running"
+    return {
+        "status": status,
+        "complete": complete,
+        "batch_id": batch["batch_id"],
+        "mode": batch["mode"],
+        "counts": counts,
+        "total": len(batch["target_unit_ids"]),
+        "error": "",
+        "units": units,
+    }
 
 
 def prefetch_target_unit_id(state: dict[str, Any]) -> str:
@@ -707,6 +1132,79 @@ def read_utf8(path: Path, label: str) -> str:
     if not text.strip():
         raise BookGrillingError(f"{label} cannot be empty")
     return text
+
+
+def load_staged_prefetch_artifacts(
+    course_dir: Path,
+    state: dict[str, Any],
+    job: dict[str, Any],
+) -> dict[str, Any]:
+    unit_id = str(job["unit_id"])
+    attempt = int(job.get("attempt", 0))
+    if attempt < 1:
+        raise BookGrillingError(f"Prefetch job {unit_id} has no staged attempt")
+    attempt_dir = prefetch_job_attempt_path(course_dir, unit_id, attempt)
+    source_path = attempt_dir / "unit.txt"
+    tree_path = attempt_dir / "tree.json"
+    source_text = read_utf8(source_path, "staged exact unit text")
+    raw_tree = load_json(tree_path)
+    tree = validate_tree(raw_tree, unit_id=unit_id, source_text=source_text)
+    if tree != raw_tree:
+        raise BookGrillingError("Staged tree is not normalized")
+    artifacts = job.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise BookGrillingError(f"Prefetch job {unit_id} lacks artifact receipts")
+    hashes = {
+        "source_text_sha256": text_sha256(source_text),
+        "tree_sha256": value_sha256(tree),
+    }
+    for key, value in hashes.items():
+        if str(artifacts.get(key, "")) != value:
+            raise BookGrillingError(
+                f"Staged {unit_id} {key} is stale or corrupted"
+            )
+    if str(job.get("course_sha256", "")) != course_fingerprint(state):
+        raise BookGrillingError(f"Prefetch job {unit_id} belongs to another course")
+    if str(job.get("source_unit_sha256", "")) != value_sha256(
+        source_unit(state, unit_id)
+    ):
+        raise BookGrillingError(
+            f"Prefetch job {unit_id} source-unit metadata changed"
+        )
+    return {
+        "source_text": source_text,
+        "tree": tree,
+        "source_path": source_path,
+        "tree_path": tree_path,
+        "attempt_dir": attempt_dir,
+    }
+
+
+def require_job_claim(
+    job: dict[str, Any],
+    *,
+    worker_token: str,
+    role: str,
+) -> str:
+    worker_sha256 = worker_fingerprint(worker_token)
+    claim = job.get("claim")
+    if not isinstance(claim, dict):
+        raise BookGrillingError(
+            f"Prefetch job {job['unit_id']} is not claimed"
+        )
+    if str(claim.get("worker_sha256", "")) != worker_sha256:
+        raise BookGrillingError(
+            f"Prefetch job {job['unit_id']} belongs to another worker"
+        )
+    if str(claim.get("role", "")) != role:
+        raise BookGrillingError(
+            f"Prefetch job {job['unit_id']} is not claimed for {role}"
+        )
+    if int(claim.get("expires_at", 0)) <= int(time.time()):
+        raise BookGrillingError(
+            f"Prefetch job {job['unit_id']} worker lease expired"
+        )
+    return worker_sha256
 
 
 def load_cached_unit(
@@ -890,6 +1388,25 @@ def archive_prefetch_units(
     return archived
 
 
+def set_prefetch_job_status(
+    course_dir: Path,
+    unit_id: str,
+    status: str,
+    *,
+    error: str = "",
+) -> None:
+    if status not in PREFETCH_JOB_STATUSES:
+        raise BookGrillingError(f"Invalid prefetch job status: {status}")
+    job = load_prefetch_job(course_dir, unit_id)
+    if job is None:
+        return
+    job["status"] = status
+    job["claim"] = None
+    job["last_error"] = error
+    job["updated_at"] = utc_now()
+    write_prefetch_job(course_dir, job)
+
+
 def append_event(
     state: dict[str, Any],
     event_type: str,
@@ -1065,6 +1582,12 @@ def context_payload(state: dict[str, Any]) -> dict[str, Any]:
         ),
         "page_path": state["page_path"],
         "prefetch": prefetch,
+        "prefetch_batch": prefetch_batch_status(
+            course_dir,
+            state,
+            include_units=False,
+            deep_validate=False,
+        ),
     }
 
 
@@ -1161,6 +1684,15 @@ def command_prepare_unit(args: argparse.Namespace) -> dict[str, Any]:
     )
     state["revision"] = int(state["revision"]) + 1
     state["updated_at"] = utc_now()
+    archives = archive_prefetch_units(
+        course_dir,
+        state,
+        [unit_id],
+        reason="Superseded by foreground preparation",
+    )
+    if archives:
+        prepared["cache_archive"] = archives[0]
+    set_prefetch_job_status(course_dir, unit_id, "consumed")
     append_event(state, "unit_prepared", prepared)
     persist(state, course_dir)
     return context_payload(state)
@@ -1176,60 +1708,406 @@ def command_prefetch_context(args: argparse.Namespace) -> dict[str, Any]:
         "safe_context": state["safe_context"],
         "current_unit_id": state["current_unit_id"],
         "prefetch": prefetch_status(course_dir, state),
+        "batch": prefetch_batch_status(
+            course_dir,
+            state,
+            include_units=False,
+            deep_validate=False,
+        ),
+    }
+
+
+def command_prefetch_plan(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    require_source_integrity(state)
+    mode = args.mode
+    if args.batch_size < 1:
+        raise BookGrillingError("batch_size must be positive")
+    candidates = prefetch_candidate_unit_ids(state)
+    with prefetch_lock(course_dir):
+        batch = load_prefetch_batch(course_dir, state)
+        if batch is None:
+            seed = f"{state['book']['id']}:{time.time_ns()}"
+            now = utc_now()
+            batch = {
+                "schema_version": SCHEMA_VERSION,
+                "batch_id": f"batch-{text_sha256(seed)[:16]}",
+                "mode": mode,
+                "course_sha256": course_fingerprint(state),
+                "source_sha256": state["source"]["sha256"],
+                "target_unit_ids": [],
+                "created_at": now,
+                "updated_at": now,
+            }
+        existing = list(batch["target_unit_ids"])
+        if mode == "remaining":
+            selected = candidates
+            batch["mode"] = "remaining"
+        else:
+            unseen = [item for item in candidates if item not in existing]
+            selected = unseen[: args.batch_size]
+        combined = set(existing) | set(selected)
+        batch["target_unit_ids"] = [
+            unit_id
+            for unit_id in state["learning_unit_ids"]
+            if unit_id in combined
+        ]
+        batch["updated_at"] = utc_now()
+        write_prefetch_batch(course_dir, batch)
+        ensure_prefetch_jobs(course_dir, state, batch)
+        for unit_id in selected:
+            job = load_prefetch_job(course_dir, unit_id)
+            if job and job["status"] == "stale":
+                replacement = new_prefetch_job(state, batch, unit_id)
+                replacement["attempt"] = int(job.get("attempt", 0))
+                replacement["created_at"] = job.get("created_at", utc_now())
+                replacement["last_error"] = "Requeued after invalidation"
+                write_prefetch_job(course_dir, replacement)
+        recovered = recover_prefetch_claims(
+            course_dir,
+            batch,
+            force=False,
+        )
+    result = prefetch_batch_status(course_dir, state, include_units=True)
+    result["recovered_expired_claims"] = recovered
+    result["candidate_count"] = len(candidates)
+    return result
+
+
+def command_prefetch_status(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    require_source_integrity(state)
+    return prefetch_batch_status(course_dir, state, include_units=True)
+
+
+def command_prefetch_resume(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    with prefetch_lock(course_dir):
+        batch = load_prefetch_batch(course_dir, state)
+        if batch is None:
+            raise BookGrillingError("No prefetch batch exists to resume")
+        ensure_prefetch_jobs(course_dir, state, batch)
+        recovered = recover_prefetch_claims(
+            course_dir,
+            batch,
+            force=True,
+        )
+    result = prefetch_batch_status(course_dir, state, include_units=True)
+    result["recovered_claims"] = recovered
+    return result
+
+
+def command_prefetch_claim(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    role = args.role
+    worker_sha256 = worker_fingerprint(args.worker_token)
+    with prefetch_lock(course_dir):
+        batch = load_prefetch_batch(course_dir, state)
+        if batch is None:
+            raise BookGrillingError("Run prefetch-plan before claiming work")
+        ensure_prefetch_jobs(course_dir, state, batch)
+        recover_prefetch_claims(course_dir, batch, force=False)
+        selected: dict[str, Any] | None = None
+        for unit_id in batch["target_unit_ids"]:
+            job = load_prefetch_job(course_dir, unit_id)
+            if not job:
+                continue
+            claim = job.get("claim")
+            if (
+                job["status"] in {"generating", "reviewing"}
+                and isinstance(claim, dict)
+                and claim.get("worker_sha256") == worker_sha256
+                and claim.get("role") == role
+            ):
+                selected = job
+                break
+        if selected is None:
+            eligible_statuses = (
+                {"queued", "repairing"}
+                if role == "generator"
+                else {"pending_review"}
+            )
+            for unit_id in batch["target_unit_ids"]:
+                job = load_prefetch_job(course_dir, unit_id)
+                if not job or job["status"] not in eligible_statuses:
+                    continue
+                if role == "reviewer" and job.get("generated_by") == worker_sha256:
+                    continue
+                selected = job
+                break
+        if selected is None:
+            return {
+                "claimed": False,
+                "role": role,
+                "batch": prefetch_batch_status(
+                    course_dir,
+                    state,
+                    include_units=False,
+                    deep_validate=False,
+                ),
+            }
+        selected["status"] = "generating" if role == "generator" else "reviewing"
+        selected["claim"] = {
+            "role": role,
+            "worker_sha256": worker_sha256,
+            "claimed_at": utc_now(),
+            "expires_at": int(time.time()) + PREFETCH_LEASE_SECONDS,
+        }
+        selected["updated_at"] = utc_now()
+        write_prefetch_job(course_dir, selected)
+    unit_id = str(selected["unit_id"])
+    staged = selected.get("artifacts") if role == "reviewer" else None
+    return {
+        "claimed": True,
+        "role": role,
+        "batch_id": selected["batch_id"],
+        "unit_id": unit_id,
+        "unit": source_unit(state, unit_id),
+        "source": state["source"],
+        "safe_context": state["safe_context"],
+        "attempt": int(selected.get("attempt", 0)),
+        "staged_artifacts": staged,
+    }
+
+
+def command_stage_prefetch_unit(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    require_source_integrity(state)
+    unit_id = validate_id(args.expected_unit, "expected_unit")
+    with prefetch_lock(course_dir):
+        batch = load_prefetch_batch(course_dir, state)
+        if batch is None or unit_id not in batch["target_unit_ids"]:
+            raise BookGrillingError(f"Unit {unit_id} is not in the active batch")
+        job = load_prefetch_job(course_dir, unit_id)
+        if not job or job["status"] != "generating":
+            raise BookGrillingError(f"Unit {unit_id} is not claimed for generation")
+        generator_sha256 = require_job_claim(
+            job,
+            worker_token=args.worker_token,
+            role="generator",
+        )
+        source_text = read_utf8(args.source_text, "prefetched exact unit text")
+        tree = validate_tree(
+            load_json(args.tree),
+            unit_id=unit_id,
+            source_text=source_text,
+        )
+        attempt = int(job.get("attempt", 0)) + 1
+        attempt_dir = prefetch_job_attempt_path(course_dir, unit_id, attempt)
+        source_path = attempt_dir / "unit.txt"
+        tree_path = attempt_dir / "tree.json"
+        atomic_write_text(source_path, source_text)
+        atomic_write_text(tree_path, json_text(tree) + "\n")
+        job.update(
+            {
+                "status": "pending_review",
+                "attempt": attempt,
+                "claim": None,
+                "generated_by": generator_sha256,
+                "reviewed_by": "",
+                "artifacts": {
+                    "source_text_path": str(source_path),
+                    "tree_path": str(tree_path),
+                    "source_text_sha256": text_sha256(source_text),
+                    "tree_sha256": value_sha256(tree),
+                },
+                "last_error": "",
+                "updated_at": utc_now(),
+            }
+        )
+        write_prefetch_job(course_dir, job)
+    return {
+        "staged": job["artifacts"],
+        "unit_id": unit_id,
+        "attempt": attempt,
+        "next": "independent_review",
+        "batch": prefetch_batch_status(
+            course_dir,
+            state,
+            include_units=False,
+            deep_validate=False,
+        ),
+    }
+
+
+def command_record_prefetch_review(args: argparse.Namespace) -> dict[str, Any]:
+    course_dir = args.course_dir.resolve()
+    state = read_state(course_dir)
+    unit_id = validate_id(args.expected_unit, "expected_unit")
+    with prefetch_lock(course_dir):
+        batch = load_prefetch_batch(course_dir, state)
+        if batch is None or unit_id not in batch["target_unit_ids"]:
+            raise BookGrillingError(f"Unit {unit_id} is not in the active batch")
+        job = load_prefetch_job(course_dir, unit_id)
+        if not job or job["status"] != "reviewing":
+            raise BookGrillingError(f"Unit {unit_id} is not claimed for review")
+        reviewer_sha256 = require_job_claim(
+            job,
+            worker_token=args.worker_token,
+            role="reviewer",
+        )
+        if reviewer_sha256 == job.get("generated_by"):
+            raise BookGrillingError(
+                "Independent reviewer must differ from the generator worker"
+            )
+        staged = load_staged_prefetch_artifacts(course_dir, state, job)
+        review = validate_failed_review(
+            load_json(args.review),
+            artifact=staged["tree"],
+            source_hash=text_sha256(staged["source_text"]),
+            unit_id=unit_id,
+        )
+        review_path = staged["attempt_dir"] / "review.json"
+        atomic_write_text(review_path, json_text(review) + "\n")
+        job.update(
+            {
+                "status": "repairing",
+                "claim": None,
+                "reviewed_by": reviewer_sha256,
+                "last_error": json_text(review["issues"], pretty=False),
+                "updated_at": utc_now(),
+            }
+        )
+        write_prefetch_job(course_dir, job)
+    return {
+        "unit_id": unit_id,
+        "attempt": job["attempt"],
+        "verdict": "failed",
+        "next": "repair_and_restage",
+        "issues": review["issues"],
+        "batch": prefetch_batch_status(
+            course_dir,
+            state,
+            include_units=False,
+            deep_validate=False,
+        ),
     }
 
 
 def command_cache_unit(args: argparse.Namespace) -> dict[str, Any]:
     course_dir = args.course_dir.resolve()
     state = read_state(course_dir)
-    target_id = prefetch_target_unit_id(state)
+    require_source_integrity(state)
     unit_id = validate_id(args.expected_unit, "expected_unit")
-    if not target_id:
-        raise BookGrillingError("No bounded prefetch target is currently available")
-    if unit_id != target_id:
-        raise BookGrillingError(
-            f"Stale prefetch target: expected {unit_id!r}, actual {target_id!r}"
-        )
-    record = state["unit_records"][unit_id]
-    if record["status"] not in {"future", "needs_preparation", "invalid"}:
-        raise BookGrillingError(
-            f"Unit {unit_id} cannot be cached from status {record['status']!r}"
-        )
+    with prefetch_lock(course_dir):
+        batch = load_prefetch_batch(course_dir, state)
+        job: dict[str, Any] | None = None
+        reviewer_sha256 = ""
+        staged: dict[str, Any] | None = None
+        if batch is not None and unit_id in batch["target_unit_ids"]:
+            job = load_prefetch_job(course_dir, unit_id)
+            if not job or job["status"] != "reviewing":
+                raise BookGrillingError(
+                    f"Batch unit {unit_id} is not claimed for independent review"
+                )
+            if not args.worker_token:
+                raise BookGrillingError(
+                    "Batch cache-unit requires the independent reviewer worker token"
+                )
+            reviewer_sha256 = require_job_claim(
+                job,
+                worker_token=args.worker_token,
+                role="reviewer",
+            )
+            if reviewer_sha256 == job.get("generated_by"):
+                raise BookGrillingError(
+                    "Independent reviewer must differ from the generator worker"
+                )
+            staged = load_staged_prefetch_artifacts(course_dir, state, job)
+        else:
+            target_id = prefetch_target_unit_id(state)
+            if not target_id:
+                raise BookGrillingError(
+                    "No bounded prefetch target is currently available"
+                )
+            if unit_id != target_id:
+                raise BookGrillingError(
+                    f"Stale prefetch target: expected {unit_id!r}, "
+                    f"actual {target_id!r}"
+                )
 
-    source_text = read_utf8(args.source_text, "prefetched exact unit text")
-    tree = validate_tree(
-        load_json(args.tree),
-        unit_id=unit_id,
-        source_text=source_text,
-    )
-    review = validate_review(
-        load_json(args.review),
-        artifact_type="unit_tree",
-        artifact=tree,
-        source_hash=text_sha256(source_text),
-        unit_id=unit_id,
-    )
-    package = {
-        "schema_version": SCHEMA_VERSION,
-        "unit_id": unit_id,
-        "book_id": state["book"]["id"],
-        "source_sha256": state["source"]["sha256"],
-        "course_sha256": course_fingerprint(state),
-        "source_unit_sha256": value_sha256(source_unit(state, unit_id)),
-        "source_text_sha256": text_sha256(source_text),
-        "tree_sha256": value_sha256(tree),
-        "review_sha256": value_sha256(review),
-        "cached_at": utc_now(),
-    }
-    paths = cached_unit_paths(course_dir, unit_id)
-    # package.json is the ready marker and is always written last.
-    atomic_write_text(paths["source_text"], source_text)
-    atomic_write_text(paths["tree"], json_text(tree) + "\n")
-    atomic_write_text(paths["review"], json_text(review) + "\n")
-    atomic_write_text(paths["package"], json_text(package) + "\n")
+        record = state["unit_records"][unit_id]
+        if record["status"] not in {"future", "needs_preparation", "invalid"}:
+            raise BookGrillingError(
+                f"Unit {unit_id} cannot be cached from status {record['status']!r}"
+            )
+        source_text = read_utf8(args.source_text, "prefetched exact unit text")
+        tree = validate_tree(
+            load_json(args.tree),
+            unit_id=unit_id,
+            source_text=source_text,
+        )
+        if staged is not None and (
+            text_sha256(source_text) != text_sha256(staged["source_text"])
+            or value_sha256(tree) != value_sha256(staged["tree"])
+        ):
+            raise BookGrillingError(
+                "Reviewed batch inputs do not match the persisted staged attempt"
+            )
+        review = validate_review(
+            load_json(args.review),
+            artifact_type="unit_tree",
+            artifact=tree,
+            source_hash=text_sha256(source_text),
+            unit_id=unit_id,
+        )
+        package = {
+            "schema_version": SCHEMA_VERSION,
+            "unit_id": unit_id,
+            "book_id": state["book"]["id"],
+            "source_sha256": state["source"]["sha256"],
+            "course_sha256": course_fingerprint(state),
+            "source_unit_sha256": value_sha256(source_unit(state, unit_id)),
+            "source_text_sha256": text_sha256(source_text),
+            "tree_sha256": value_sha256(tree),
+            "review_sha256": value_sha256(review),
+            "cached_at": utc_now(),
+        }
+        if batch is not None and job is not None:
+            package.update(
+                {
+                    "batch_id": batch["batch_id"],
+                    "generation_attempt": int(job["attempt"]),
+                    "independent_worker_separation": True,
+                }
+            )
+        paths = cached_unit_paths(course_dir, unit_id)
+        # Remove any old ready marker before replacing artifacts. The new
+        # package is written last and is the only ready marker.
+        paths["package"].unlink(missing_ok=True)
+        atomic_write_text(paths["source_text"], source_text)
+        atomic_write_text(paths["tree"], json_text(tree) + "\n")
+        atomic_write_text(paths["review"], json_text(review) + "\n")
+        atomic_write_text(paths["package"], json_text(package) + "\n")
+        if job is not None and staged is not None:
+            atomic_write_text(
+                staged["attempt_dir"] / "review.json",
+                json_text(review) + "\n",
+            )
+            job.update(
+                {
+                    "status": "ready",
+                    "claim": None,
+                    "reviewed_by": reviewer_sha256,
+                    "last_error": "",
+                    "updated_at": utc_now(),
+                }
+            )
+            write_prefetch_job(course_dir, job)
     return {
         "cached": package,
         "prefetch": prefetch_status(course_dir, state),
+        "batch": prefetch_batch_status(
+            course_dir,
+            state,
+            include_units=False,
+            deep_validate=False,
+        ),
     }
 
 
@@ -1271,6 +2149,7 @@ def command_activate_prefetched_unit(args: argparse.Namespace) -> dict[str, Any]
     )
     if archives:
         prepared["cache_archive"] = archives[0]
+    set_prefetch_job_status(course_dir, unit_id, "consumed")
     append_event(state, "prefetched_unit_activated", prepared)
     persist(state, course_dir)
     return context_payload(state)
@@ -1391,6 +2270,11 @@ def command_commit(args: argparse.Namespace) -> dict[str, Any]:
         )
         if archives:
             prefetched_prepared["cache_archive"] = archives[0]
+        set_prefetch_job_status(
+            course_dir,
+            prefetched_prepared["unit_id"],
+            "consumed",
+        )
         append_event(state, "prefetched_unit_activated", prefetched_prepared)
     elif prefetch_error:
         append_event(
@@ -1522,6 +2406,12 @@ def command_invalidate(args: argparse.Namespace) -> dict[str, Any]:
         reason=reason,
     )
     for affected_id in affected_ids:
+        set_prefetch_job_status(
+            course_dir,
+            affected_id,
+            "stale",
+            error=f"Invalidated with {unit_id}: {reason}",
+        )
         record = state["unit_records"][affected_id]
         if record.get("tree") is not None:
             history_path = (
@@ -1716,6 +2606,18 @@ def command_audit(args: argparse.Namespace) -> dict[str, Any]:
                 load_cached_unit(course_dir, state, directory.name)
             except BookGrillingError as exc:
                 warnings.append(f"{directory.name} prefetch cache is invalid: {exc}")
+    batch = prefetch_batch_status(course_dir, state, include_units=True)
+    if batch["status"] == "stale":
+        warnings.append(f"prefetch batch is stale: {batch['error']}")
+    elif batch["status"] == "blocked":
+        blocked_units = [
+            item["unit_id"]
+            for item in batch["units"]
+            if item["status"] in {"blocked", "stale"}
+        ]
+        warnings.append(
+            "prefetch batch has blocked units: " + ", ".join(blocked_units)
+        )
     return {
         "ok": not errors,
         "errors": errors,
@@ -1723,6 +2625,10 @@ def command_audit(args: argparse.Namespace) -> dict[str, Any]:
         "revision": state["revision"],
         "book_status": state["book_status"],
         "page_path": state["page_path"],
+        "prefetch_batch": {
+            key: batch[key]
+            for key in ("status", "complete", "batch_id", "counts", "total")
+        },
     }
 
 
@@ -1779,20 +2685,86 @@ def build_parser() -> argparse.ArgumentParser:
 
     prefetch_context = subparsers.add_parser(
         "prefetch-context",
-        help="Discover the one bounded look-ahead unit and cache status.",
+        help="Return exact-next cache status plus compact batch progress.",
     )
     prefetch_context.add_argument("course_dir", type=Path)
     prefetch_context.set_defaults(handler=command_prefetch_context)
 
+    prefetch_plan = subparsers.add_parser(
+        "prefetch-plan",
+        help="Create or extend a persistent multi-unit prefetch batch.",
+    )
+    prefetch_plan.add_argument("course_dir", type=Path)
+    prefetch_plan.add_argument(
+        "--mode",
+        choices=("remaining", "next-batch"),
+        default="remaining",
+    )
+    prefetch_plan.add_argument(
+        "--batch-size",
+        type=int,
+        default=DEFAULT_PREFETCH_BATCH_SIZE,
+    )
+    prefetch_plan.set_defaults(handler=command_prefetch_plan)
+
+    prefetch_status_parser = subparsers.add_parser(
+        "prefetch-status",
+        help="Validate every target and report persistent batch progress.",
+    )
+    prefetch_status_parser.add_argument("course_dir", type=Path)
+    prefetch_status_parser.set_defaults(handler=command_prefetch_status)
+
+    prefetch_resume = subparsers.add_parser(
+        "prefetch-resume",
+        help="Recover interrupted worker claims while preserving artifacts.",
+    )
+    prefetch_resume.add_argument("course_dir", type=Path)
+    prefetch_resume.set_defaults(handler=command_prefetch_resume)
+
+    prefetch_claim = subparsers.add_parser(
+        "prefetch-claim",
+        help="Atomically claim one ordered generation or review job.",
+    )
+    prefetch_claim.add_argument("course_dir", type=Path)
+    prefetch_claim.add_argument(
+        "--role",
+        choices=("generator", "reviewer"),
+        required=True,
+    )
+    prefetch_claim.add_argument("--worker-token", required=True)
+    prefetch_claim.set_defaults(handler=command_prefetch_claim)
+
+    stage_prefetch = subparsers.add_parser(
+        "stage-prefetch-unit",
+        help="Persist one normalized candidate before independent review.",
+    )
+    stage_prefetch.add_argument("course_dir", type=Path)
+    stage_prefetch.add_argument("--tree", type=Path, required=True)
+    stage_prefetch.add_argument("--source-text", type=Path, required=True)
+    stage_prefetch.add_argument("--expected-unit", required=True)
+    stage_prefetch.add_argument("--worker-token", required=True)
+    stage_prefetch.set_defaults(handler=command_stage_prefetch_unit)
+
+    record_prefetch_review = subparsers.add_parser(
+        "record-prefetch-review",
+        help="Persist a failed independent review and queue a repair.",
+    )
+    record_prefetch_review.add_argument("course_dir", type=Path)
+    record_prefetch_review.add_argument("--review", type=Path, required=True)
+    record_prefetch_review.add_argument("--expected-unit", required=True)
+    record_prefetch_review.add_argument("--worker-token", required=True)
+    record_prefetch_review.set_defaults(handler=command_record_prefetch_review)
+
     cache_unit = subparsers.add_parser(
         "cache-unit",
-        help="Validate and cache one independently reviewed look-ahead unit.",
+        help="Validate and cache one independently reviewed batch or next unit.",
     )
     cache_unit.add_argument("course_dir", type=Path)
     cache_unit.add_argument("--tree", type=Path, required=True)
     cache_unit.add_argument("--review", type=Path, required=True)
     cache_unit.add_argument("--source-text", type=Path, required=True)
     cache_unit.add_argument("--expected-unit", required=True)
+    cache_unit.add_argument("--worker-token")
     cache_unit.set_defaults(handler=command_cache_unit)
 
     activate_prefetched = subparsers.add_parser(

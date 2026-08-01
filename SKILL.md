@@ -1,6 +1,6 @@
 ---
 name: book-grilling
-description: Systematically teach a complete knowledge-oriented work one source-sized unit and one question at a time, giving a recommended answer while building a reviewed, progressively unlocked visual question tree. Supports safe cross-session prefetch of the next unit. Use for 读书, 精读, 一次一问, 按章学习, 继续学习, 预制下一单元, guided reading, learning a whole nonfiction book, resuming a Book Grilling course, or reviewing completed unit knowledge trees.
+description: Systematically teach a complete knowledge-oriented work one source-sized unit and one question at a time, giving a recommended answer while building a reviewed, progressively unlocked visual question tree. Supports persistent, independently reviewed batch prefetch across sessions. Use for 读书, 精读, 一次一问, 按章学习, 继续学习, 批量预制后续单元, 继续预制, 预制进度, guided reading, learning a whole nonfiction book, resuming a Book Grilling course, or reviewing completed unit knowledge trees.
 ---
 
 # Book Grilling
@@ -19,8 +19,8 @@ not claim closed-book recall, retention, or mastery.
 - Preserve the author's volume/part/chapter/section/essay numbering and names.
 - Split that structure into **learning units**: the largest coherent source
   blocks that fit safely in one preparation context.
-- Build no whole-book knowledge graph. Keep only the current reviewed question
-  tree plus at most one reviewed next-unit cache.
+- Build no whole-book knowledge graph. Keep one source-local reviewed question
+  tree per unit; any number of future units may be cached independently.
 - Every tree node is exactly:
   `one question + one recommended answer + exact source evidence`.
 - Show one question and its recommended answer at a time. The learner may
@@ -57,14 +57,14 @@ manifest, then run `init`.
 Initialization creates the book page and source navigation. Future units expose
 only their source title and location.
 
-### 3. Prefetch the next unit in another session
+### 3. Batch-prefetch future units in another session
 
-Read [prefetch.md](references/prefetch.md) when the user asks to prebuild or
-prepare the next unit in parallel.
+Read [prefetch.md](references/prefetch.md) when the user asks to prebuild future
+units, continue an interrupted batch, or inspect prefetch progress.
 
 The complete user-facing instruction may be as short as:
 
-> 使用 book-grilling 预制下一单元，完成后停下。
+> 使用 book-grilling 预制后续全部单元。
 
 Resolve the course automatically. Search the workspace for active
 `.book-grilling/course.json` files; use an explicitly named book when present,
@@ -72,14 +72,24 @@ or the sole active course. If several active books remain ambiguous, ask only
 for the book title—never ask the learner for unit ids, revisions, page ranges,
 source locators, cache paths, or runtime parameters.
 
-Run `prefetch-context`; it discovers the single eligible target. Extract,
-generate, and independently review that unit exactly as normal, but finish with
-`cache-unit`, not `prepare-unit`. Background prefetch must not commit questions,
-change the current node, regenerate the reader, or edit `course.json`.
+Run `prefetch-plan --mode remaining`; it queues every eligible future unit in
+source order without editing `course.json`. Use unique generator workers and
+fresh independent reviewer workers under [prefetch.md](references/prefetch.md).
+Persist every normalized candidate with `stage-prefetch-unit` before review.
+Only `cache-unit` with a passed review from a different claimed worker may write
+that unit's `package.json`.
 
-If the cache is already ready, report that and stop. Do not scan or cache all
-later units: the bounded one-unit look-ahead keeps source position, review, and
-invalidation trustworthy.
+The batch is resumable. On an explicit “继续预制”, run `prefetch-resume`, reuse
+staged artifacts, and continue their exact phase. Never regenerate a valid
+staged candidate merely because the conversation changed.
+
+Before claiming completion, run `prefetch-status`. Say “预制完成” only when it
+returns `status: ready` and `complete: true`. If any unit is queued, generating,
+pending review, reviewing, repairing, blocked, or stale, report exact counts as
+partial progress and keep working while the session can safely continue.
+
+Background prefetch must not commit questions, change the current node,
+regenerate the reader, or edit `course.json`.
 
 ### 4. Prepare one learning unit once
 
@@ -117,9 +127,11 @@ the state, unlocks at most one node, and regenerates the page.
 
 ### 6. Cross a unit boundary
 
-After the last node resolves, `commit` moves to the next source unit. If a valid
-prefetch cache is ready, the same atomic commit installs it and returns its root
-question immediately. If no valid cache exists, learning progress still commits
+After the last node resolves, `commit` moves to the exact next source unit. If
+its valid package is ready, the same atomic commit installs it and returns its
+root immediately. Later ready packages remain cached and are consumed in order.
+The runtime never skips a missing earlier unit to reach a later ready package.
+If the exact next package is absent or invalid, learning progress still commits
 normally and the result says `prepare_current_unit`.
 
 If background preparation finishes just after the boundary, the next `context`
@@ -156,6 +168,12 @@ python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   context <course-dir>
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   prefetch-context <course-dir>
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-plan <course-dir> --mode remaining
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-status <course-dir>
+python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
+  prefetch-resume <course-dir>
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
   fingerprint --text-file <unit.txt>
 python3 /absolute/path/to/book-grilling/scripts/book_grilling.py \
@@ -207,8 +225,10 @@ Routine turn:
 Slow work is allowed once at book initialization, once per unit preparation,
 and once at final synthesis.
 
-Background prefetch is that next unit's one allowed preparation pass. It is not
-a routine teaching turn and must never mutate live learning progress.
+Background prefetch is each target unit's one allowed preparation pass. It is
+not part of a routine teaching turn and must never mutate live learning progress.
+Batch workers may prepare multiple source-local units in parallel, but every
+unit keeps its own independent review gate and immutable package.
 
 ## Reader policy
 
@@ -237,6 +257,10 @@ Reject a result that:
 - asks the learner to supply prefetch unit ids, revisions, page ranges, or
   runtime commands that the skill can discover;
 - changes live progress or exposes cached answers while prefetching;
+- uses the same worker identity to generate and independently review a unit;
+- loses staged artifacts or starts over after a resumable interruption;
+- claims a batch is complete without a final `prefetch-status` receipt whose
+  `complete` value is true;
 - reveals locked answers in HTML, embedded JSON, or accessibility text;
 - performs more than one state/render call on a routine turn;
 - claims mastery, retention, or closed-book ability;

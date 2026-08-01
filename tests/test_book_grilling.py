@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -27,15 +28,23 @@ class BookGrillingRuntimeTest(unittest.TestCase):
         self.source.write_text(
             "示例作品\n\n"
             "第一单元解释甲。甲依赖一个必要条件。\n\n"
-            "第二单元解释乙。乙限定了甲的适用范围。\n",
+            "第二单元解释乙。乙限定了甲的适用范围。\n\n"
+            "第三单元解释丙。丙补充了乙的边界。\n\n"
+            "第四单元解释丁。丁说明了最终条件。\n",
             encoding="utf-8",
         )
         self.unit_one_text = "第一单元解释甲。甲依赖一个必要条件。"
         self.unit_two_text = "第二单元解释乙。乙限定了甲的适用范围。"
+        self.unit_three_text = "第三单元解释丙。丙补充了乙的边界。"
+        self.unit_four_text = "第四单元解释丁。丁说明了最终条件。"
         self.unit_one = self.root / "unit-one.txt"
         self.unit_two = self.root / "unit-two.txt"
+        self.unit_three = self.root / "unit-three.txt"
+        self.unit_four = self.root / "unit-four.txt"
         self.unit_one.write_text(self.unit_one_text, encoding="utf-8")
         self.unit_two.write_text(self.unit_two_text, encoding="utf-8")
+        self.unit_three.write_text(self.unit_three_text, encoding="utf-8")
+        self.unit_four.write_text(self.unit_four_text, encoding="utf-8")
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -206,6 +215,78 @@ class BookGrillingRuntimeTest(unittest.TestCase):
             ],
         }
 
+    def simple_tree(
+        self,
+        unit_id: str,
+        source_text: str,
+        label: str,
+    ) -> dict:
+        node_id = f"q-{unit_id}"
+        return {
+            "schema_version": 1,
+            "unit_id": unit_id,
+            "title": f"{label}问题树",
+            "source_text_sha256": hashlib.sha256(
+                source_text.encode("utf-8")
+            ).hexdigest(),
+            "root_id": node_id,
+            "nodes": [
+                {
+                    "id": node_id,
+                    "parent_id": "",
+                    "position": 1,
+                    "question": f"{label}解释什么？",
+                    "recommended_answer": f"{label}的完整推荐答案。",
+                    "provenance": "editorial_synthesis",
+                    "source": {
+                        "locator": f"{label}全部",
+                        "excerpt": source_text,
+                    },
+                    "interpretive_note": "这是对本单元关系的整理。",
+                }
+            ],
+            "coverage": [
+                {
+                    "locator": f"{label}全部",
+                    "disposition": "knowledge",
+                    "node_ids": [node_id],
+                    "reason": "完整覆盖本单元。",
+                }
+            ],
+        }
+
+    def multi_unit_manifest(self) -> dict:
+        manifest = self.manifest()
+        manifest["source_units"].extend(
+            [
+                {
+                    "id": "unit-three",
+                    "parent_id": "part-one",
+                    "position": 3,
+                    "kind": "章",
+                    "title": "第三单元",
+                    "locator": "第三段",
+                    "learning_unit": True,
+                    "sequence": 3,
+                    "split_origin": "author",
+                    "estimated_tokens": 30,
+                },
+                {
+                    "id": "unit-four",
+                    "parent_id": "part-one",
+                    "position": 4,
+                    "kind": "章",
+                    "title": "第四单元",
+                    "locator": "第四段",
+                    "learning_unit": True,
+                    "sequence": 4,
+                    "split_origin": "author",
+                    "estimated_tokens": 30,
+                },
+            ]
+        )
+        return manifest
+
     @staticmethod
     def review(artifact_type: str, artifact: dict, source_hash: str, unit: str = "") -> dict:
         value = {
@@ -293,6 +374,104 @@ class BookGrillingRuntimeTest(unittest.TestCase):
             source_text_path,
             "--expected-unit",
             unit,
+        )
+
+    def plan_batch(
+        self,
+        *,
+        mode: str = "remaining",
+        batch_size: int = 5,
+    ) -> dict:
+        return self.run_cli(
+            "prefetch-plan",
+            self.course,
+            "--mode",
+            mode,
+            "--batch-size",
+            batch_size,
+        )
+
+    def claim(self, role: str, token: str) -> dict:
+        return self.run_cli(
+            "prefetch-claim",
+            self.course,
+            "--role",
+            role,
+            "--worker-token",
+            token,
+        )
+
+    def stage_batch_unit(
+        self,
+        tree: dict,
+        source_text_path: Path,
+        unit: str,
+        token: str,
+    ) -> dict:
+        return self.run_cli(
+            "stage-prefetch-unit",
+            self.course,
+            "--tree",
+            self.write_json(f"{unit}-batch-tree.json", tree),
+            "--source-text",
+            source_text_path,
+            "--expected-unit",
+            unit,
+            "--worker-token",
+            token,
+        )
+
+    def approve_batch_unit(
+        self,
+        tree: dict,
+        source_text_path: Path,
+        unit: str,
+        reviewer_token: str,
+    ) -> dict:
+        review = self.review(
+            "unit_tree",
+            tree,
+            tree["source_text_sha256"],
+            unit,
+        )
+        return self.run_cli(
+            "cache-unit",
+            self.course,
+            "--tree",
+            self.write_json(f"{unit}-approved-tree.json", tree),
+            "--review",
+            self.write_json(f"{unit}-approved-review.json", review),
+            "--source-text",
+            source_text_path,
+            "--expected-unit",
+            unit,
+            "--worker-token",
+            reviewer_token,
+        )
+
+    def batch_prepare(
+        self,
+        tree: dict,
+        source_text_path: Path,
+        unit: str,
+        generator_token: str,
+        reviewer_token: str,
+    ) -> dict:
+        claimed = self.claim("generator", generator_token)
+        self.assertEqual(claimed["unit_id"], unit)
+        self.stage_batch_unit(
+            tree,
+            source_text_path,
+            unit,
+            generator_token,
+        )
+        claimed = self.claim("reviewer", reviewer_token)
+        self.assertEqual(claimed["unit_id"], unit)
+        return self.approve_batch_unit(
+            tree,
+            source_text_path,
+            unit,
+            reviewer_token,
         )
 
     def commit(
@@ -576,6 +755,383 @@ class BookGrillingRuntimeTest(unittest.TestCase):
             ).exists()
         )
 
+    def test_batch_plan_claims_multiple_unique_units_without_progress_mutation(
+        self,
+    ) -> None:
+        context = self.initialize(self.multi_unit_manifest())
+        self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        state_path = self.course / ".book-grilling" / "course.json"
+        page_path = self.course / "book-grilling.html"
+        state_before = state_path.read_bytes()
+        page_before = page_path.read_bytes()
+
+        batch = self.plan_batch()
+        self.assertEqual(batch["total"], 3)
+        self.assertEqual(batch["counts"], {"queued": 3})
+        def concurrent_claim(token: str) -> tuple[int, str, str]:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "prefetch-claim",
+                    str(self.course),
+                    "--role",
+                    "generator",
+                    "--worker-token",
+                    token,
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            return result.returncode, result.stdout, result.stderr
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            raw_claims = list(
+                pool.map(
+                    concurrent_claim,
+                    ("generator-a", "generator-b", "generator-c"),
+                )
+            )
+        for returncode, _, stderr in raw_claims:
+            self.assertEqual(returncode, 0, stderr)
+        claimed = [json.loads(stdout) for _, stdout, _ in raw_claims]
+        self.assertEqual(
+            sorted(item["unit_id"] for item in claimed),
+            ["unit-four", "unit-three", "unit-two"],
+        )
+        self.assertFalse(self.claim("generator", "generator-d")["claimed"])
+        self.assertEqual(state_path.read_bytes(), state_before)
+        self.assertEqual(page_path.read_bytes(), page_before)
+
+    def test_batch_quality_gate_requires_distinct_reviewers_and_every_package(
+        self,
+    ) -> None:
+        context = self.initialize(self.multi_unit_manifest())
+        self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        state_path = self.course / ".book-grilling" / "course.json"
+        page_path = self.course / "book-grilling.html"
+        state_before = state_path.read_bytes()
+        page_before = page_path.read_bytes()
+        self.plan_batch()
+
+        self.assertEqual(
+            self.claim("generator", "generator-two")["unit_id"],
+            "unit-two",
+        )
+        self.stage_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "generator-two",
+        )
+        self.assertFalse(
+            self.claim("reviewer", "generator-two")["claimed"]
+        )
+        self.assertEqual(
+            self.claim("reviewer", "reviewer-two")["unit_id"],
+            "unit-two",
+        )
+        error = self.run_cli(
+            "cache-unit",
+            self.course,
+            "--tree",
+            self.write_json("unit-two-wrong-worker-tree.json", self.tree_two()),
+            "--review",
+            self.write_json(
+                "unit-two-wrong-worker-review.json",
+                self.review(
+                    "unit_tree",
+                    self.tree_two(),
+                    self.tree_two()["source_text_sha256"],
+                    "unit-two",
+                ),
+            ),
+            "--source-text",
+            self.unit_two,
+            "--expected-unit",
+            "unit-two",
+            "--worker-token",
+            "generator-two",
+            ok=False,
+        )
+        self.assertIn("belongs to another worker", error)
+        result = self.approve_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "reviewer-two",
+        )
+        self.assertFalse(result["batch"]["complete"])
+        self.assertEqual(result["batch"]["counts"]["ready"], 1)
+
+        self.batch_prepare(
+            self.simple_tree("unit-three", self.unit_three_text, "第三单元"),
+            self.unit_three,
+            "unit-three",
+            "generator-three",
+            "reviewer-three",
+        )
+        result = self.batch_prepare(
+            self.simple_tree("unit-four", self.unit_four_text, "第四单元"),
+            self.unit_four,
+            "unit-four",
+            "generator-four",
+            "reviewer-four",
+        )
+        self.assertTrue(result["batch"]["complete"])
+        self.assertEqual(result["batch"]["counts"], {"ready": 3})
+        for unit_id in ("unit-two", "unit-three", "unit-four"):
+            self.assertTrue(
+                (
+                    self.course
+                    / ".book-grilling"
+                    / "prefetch"
+                    / "units"
+                    / unit_id
+                    / "package.json"
+                ).is_file()
+            )
+        self.assertEqual(state_path.read_bytes(), state_before)
+        self.assertEqual(page_path.read_bytes(), page_before)
+
+    def test_interrupted_batch_review_resumes_from_staged_artifacts(self) -> None:
+        context = self.initialize(self.multi_unit_manifest())
+        self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        self.plan_batch(mode="next-batch", batch_size=1)
+        self.claim("generator", "generator-two")
+        staged = self.stage_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "generator-two",
+        )["staged"]
+        staged_tree_before = Path(staged["tree_path"]).read_bytes()
+        self.claim("reviewer", "reviewer-interrupted")
+
+        resumed = self.run_cli("prefetch-resume", self.course)
+        self.assertEqual(resumed["recovered_claims"], ["unit-two"])
+        self.assertEqual(resumed["counts"], {"pending_review": 1})
+        self.assertEqual(Path(staged["tree_path"]).read_bytes(), staged_tree_before)
+        self.assertEqual(
+            self.claim("reviewer", "reviewer-resumed")["unit_id"],
+            "unit-two",
+        )
+        approved = self.approve_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "reviewer-resumed",
+        )
+        self.assertTrue(approved["batch"]["complete"])
+
+    def test_failed_batch_review_requires_repair_before_ready(self) -> None:
+        context = self.initialize(self.multi_unit_manifest())
+        self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        self.plan_batch(mode="next-batch", batch_size=1)
+        self.claim("generator", "generator-first")
+        self.stage_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "generator-first",
+        )
+        self.claim("reviewer", "reviewer-first")
+        failed = self.review(
+            "unit_tree",
+            self.tree_two(),
+            self.tree_two()["source_text_sha256"],
+            "unit-two",
+        )
+        failed["verdict"] = "failed"
+        failed["checks"]["answers_supported"] = False
+        failed["issues"] = [
+            {
+                "check": "answers_supported",
+                "message": "答案范围需要收紧。",
+            }
+        ]
+        result = self.run_cli(
+            "record-prefetch-review",
+            self.course,
+            "--review",
+            self.write_json("failed-batch-review.json", failed),
+            "--expected-unit",
+            "unit-two",
+            "--worker-token",
+            "reviewer-first",
+        )
+        self.assertEqual(result["next"], "repair_and_restage")
+        self.assertEqual(result["batch"]["counts"], {"repairing": 1})
+        self.assertFalse(
+            (
+                self.course
+                / ".book-grilling"
+                / "prefetch"
+                / "units"
+                / "unit-two"
+                / "package.json"
+            ).exists()
+        )
+
+        self.claim("generator", "generator-repair")
+        self.stage_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "generator-repair",
+        )
+        self.claim("reviewer", "reviewer-second")
+        approved = self.approve_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "reviewer-second",
+        )
+        self.assertTrue(approved["batch"]["complete"])
+
+    def test_batch_refuses_to_stage_after_authoritative_source_changes(self) -> None:
+        context = self.initialize(self.multi_unit_manifest())
+        self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        self.plan_batch(mode="next-batch", batch_size=1)
+        self.claim("generator", "generator-source-check")
+        state_path = self.course / ".book-grilling" / "course.json"
+        state_before = state_path.read_bytes()
+        self.source.write_text(
+            self.source.read_text(encoding="utf-8") + "\n来源发生变化。",
+            encoding="utf-8",
+        )
+        error = self.run_cli(
+            "stage-prefetch-unit",
+            self.course,
+            "--tree",
+            self.write_json("changed-source-tree.json", self.tree_two()),
+            "--source-text",
+            self.unit_two,
+            "--expected-unit",
+            "unit-two",
+            "--worker-token",
+            "generator-source-check",
+            ok=False,
+        )
+        self.assertIn("source fingerprint changed", error)
+        self.assertEqual(state_path.read_bytes(), state_before)
+
+    def test_multiple_ready_units_activate_in_order_and_a_hole_never_skips(
+        self,
+    ) -> None:
+        context = self.initialize(self.multi_unit_manifest())
+        context = self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        self.plan_batch()
+        self.claim("generator", "generator-two")
+        self.assertEqual(
+            self.claim("generator", "generator-three")["unit_id"],
+            "unit-three",
+        )
+        tree_three = self.simple_tree(
+            "unit-three",
+            self.unit_three_text,
+            "第三单元",
+        )
+        self.stage_batch_unit(
+            tree_three,
+            self.unit_three,
+            "unit-three",
+            "generator-three",
+        )
+        self.claim("reviewer", "reviewer-three")
+        self.approve_batch_unit(
+            tree_three,
+            self.unit_three,
+            "unit-three",
+            "reviewer-three",
+        )
+
+        context = self.commit(
+            node="q-root",
+            revision=context["receipt"]["revision"],
+            unit="unit-one",
+        )
+        context = self.commit(
+            node="q-condition",
+            revision=context["receipt"]["revision"],
+            unit="unit-one",
+        )
+        self.assertEqual(context["receipt"]["current_unit_id"], "unit-two")
+        self.assertEqual(context["need"], "prepare_current_unit")
+        self.assertIsNone(context["current_node"])
+        self.assertEqual(context["prefetch_batch"]["counts"]["ready"], 1)
+
+        self.run_cli("prefetch-resume", self.course)
+        self.assertEqual(
+            self.claim("generator", "generator-two-resumed")["unit_id"],
+            "unit-two",
+        )
+        self.stage_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "generator-two-resumed",
+        )
+        self.assertEqual(
+            self.claim("reviewer", "reviewer-two")["unit_id"],
+            "unit-two",
+        )
+        self.approve_batch_unit(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "reviewer-two",
+        )
+        context = self.run_cli("context", self.course)
+        self.assertEqual(context["need"], "activate_prefetched_unit")
+        context = self.run_cli(
+            "activate-prefetched-unit",
+            self.course,
+            "--expected-revision",
+            context["receipt"]["revision"],
+            "--expected-unit",
+            "unit-two",
+        )
+        self.assertEqual(context["current_node"]["id"], "q-boundary")
+        context = self.commit(
+            node="q-boundary",
+            revision=context["receipt"]["revision"],
+            unit="unit-two",
+        )
+        self.assertEqual(context["receipt"]["current_unit_id"], "unit-three")
+        self.assertEqual(context["current_node"]["id"], "q-unit-three")
+
     def test_invalid_prefetch_never_blocks_learning_or_unlocks_answers(self) -> None:
         context = self.initialize()
         context = self.prepare(
@@ -698,6 +1254,39 @@ class BookGrillingRuntimeTest(unittest.TestCase):
         )
         self.assertEqual(len(archives), 1)
         self.assertTrue((archives[0] / "archive.json").is_file())
+
+    def test_batch_invalidation_marks_jobs_stale_and_plan_requeues_them(self) -> None:
+        context = self.initialize(self.multi_unit_manifest())
+        context = self.prepare(
+            self.tree_one(),
+            self.unit_one,
+            context["receipt"]["revision"],
+            "unit-one",
+        )
+        self.plan_batch()
+        self.batch_prepare(
+            self.tree_two(),
+            self.unit_two,
+            "unit-two",
+            "generator-two",
+            "reviewer-two",
+        )
+        self.run_cli(
+            "invalidate-unit",
+            self.course,
+            "--unit",
+            "unit-one",
+            "--reason",
+            "第一单元边界需要重建",
+            "--expected-revision",
+            context["receipt"]["revision"],
+        )
+        status = self.run_cli("prefetch-status", self.course)
+        self.assertEqual(status["status"], "blocked")
+        self.assertEqual(status["counts"], {"stale": 3})
+        replanned = self.plan_batch()
+        self.assertEqual(replanned["counts"], {"queued": 4})
+        self.assertFalse(replanned["complete"])
 
     def test_existing_course_without_prefetch_is_read_only_compatible(self) -> None:
         context = self.initialize()
